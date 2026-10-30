@@ -83,9 +83,16 @@ the same file to its group (deduplicated by absolute path) and opens its URL
 again.
 
 By default each file gets its own group named
-`<basename>-<sha256(abs_path)[1:8]>`, so opening several Markdown files does not
-mix them in one `mo` sidebar. Pass an optional target to choose a group
-yourself:
+`<display>-<sha256(abs_path)[1:8]>`, so opening several Markdown files does not
+mix them in one `mo` sidebar. `<display>` is:
+
+- relative to the current working directory when the file is under it, for
+  example `docs/README.md`;
+- prefixed with `~/` when the file is under the home directory but outside the
+  working directory, for example `~/.config/test.md`;
+- the full absolute path otherwise, for example `/etc/environment`.
+
+Pass an optional target to choose a group yourself:
 
 ```vim
 :MoPreview docs
@@ -158,7 +165,8 @@ preview.preview({ bufnr = 3, target = "api" })
 2. Check that the path exists and is readable. If not, report an error.
 3. Run
    `mo --no-open --json [--port PORT] --target GROUP <file>`. When no target is
-   given, `GROUP` is `<basename>-<sha256(abs_path)[1:8]>`.
+   given, `GROUP` is `<display>-<sha256(abs_path)[1:8]>`, using the cwd/home/
+   absolute-path display rules above.
 4. Parse `mo`'s JSON output, find the deeplink for `<file>`, and open it with
    `vim.ui.open` or `browser_func`.
 
