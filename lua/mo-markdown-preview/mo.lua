@@ -112,7 +112,27 @@ function M.find_url(data, path)
   return nil
 end
 
-local function run_async(cmd, callback)
+--- Add a file to mo and return its preview URL through `callback`.
+---@param path string
+---@param cfg table
+---@param callback fun(result: table)
+---@return boolean started
+function M.preview(path, cfg, callback)
+  local exe, err = executable(cfg)
+  if not exe then
+    vim.schedule(function()
+      callback({
+        code = -1,
+        stdout = "",
+        stderr = err,
+      })
+    end)
+    return false
+  end
+
+  local cmd = M.command(path, cfg)
+  cmd[1] = exe
+
   local ok, proc = pcall(vim.system, cmd, {
     text = true,
     timeout = 30000,
@@ -134,29 +154,6 @@ local function run_async(cmd, callback)
   end
 
   return ok
-end
-
---- Add a file to mo and return its preview URL through `callback`.
----@param path string
----@param cfg table
----@param callback fun(result: table)
----@return boolean started
-function M.preview(path, cfg, callback)
-  local exe, err = executable(cfg)
-  if not exe then
-    vim.schedule(function()
-      callback({
-        code = -1,
-        stdout = "",
-        stderr = err,
-      })
-    end)
-    return false
-  end
-
-  local cmd = M.command(path, cfg)
-  cmd[1] = exe
-  return run_async(cmd, callback)
 end
 
 return M
