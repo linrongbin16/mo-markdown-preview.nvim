@@ -6,9 +6,6 @@ M.defaults = {
   -- Command used to talk to mo. Can be an absolute path or a name on $PATH.
   cmd = "mo",
 
-  -- mo group (--target). nil means mo's "default" group.
-  target = nil,
-
   -- mo server port. nil means mo's default (6275).
   port = nil,
 
@@ -33,10 +30,6 @@ end
 local function validate(opts)
   if opts.cmd ~= nil and (type(opts.cmd) ~= "string" or opts.cmd == "") then
     return invalid("cmd", "a non-empty string")
-  end
-
-  if opts.target ~= nil and (type(opts.target) ~= "string" or opts.target == "") then
-    return invalid("target", "a non-empty string or nil")
   end
 
   if

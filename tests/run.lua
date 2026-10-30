@@ -110,6 +110,11 @@ local function open_buffer(path, content, filetype)
   return vim.api.nvim_get_current_buf()
 end
 
+local function default_target(path)
+  local absolute = vim.fn.fnamemodify(path, ":p")
+  return vim.fn.fnamemodify(path, ":t") .. "-" .. vim.fn.sha256(absolute):sub(1, 8)
+end
+
 local function setup(extra)
   config.reset()
   opened = nil
@@ -118,7 +123,6 @@ local function setup(extra)
   local opts = {
     cmd = fake_mo,
     port = 6123,
-    target = "nvim-test",
     browser_func = function(url)
       opened = url
     end,
@@ -178,7 +182,21 @@ test("passes the current file to mo", function()
   check(has_arg("--port"))
   check(has_arg("6123"))
   check(has_arg("--target"))
-  check(has_arg("nvim-test"))
+  check(has_arg(default_target(path)))
+end)
+
+test("accepts an explicit target argument", function()
+  local path = tmp .. "/grouped.md"
+  open_buffer(path, "# Grouped\n")
+
+  vim.cmd("MoPreview docs")
+  wait_for(function()
+    return opened ~= nil
+  end, "browser was not opened")
+
+  check(has_arg("--target"))
+  check(has_arg("docs"))
+  check(not has_arg(default_target(path)))
 end)
 
 test("does not sync modified buffer contents", function()
@@ -310,7 +328,6 @@ test("reports invalid configuration without applying it", function()
   expect_invalid({ cmd = "" }, "cmd")
   expect_invalid({ port = 0 }, "port")
   expect_invalid({ filetypes = "markdown" }, "filetypes")
-  expect_invalid({ target = 123 }, "target")
   expect_invalid({ open_browser = "yes" }, "open_browser")
 end)
 

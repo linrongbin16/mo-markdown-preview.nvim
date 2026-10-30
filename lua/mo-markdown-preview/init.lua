@@ -73,7 +73,16 @@ function M.preview(opts)
   end
 
   local cfg = config.get()
-  return cli.run(path, cfg, function(result)
+  local target = opts.target
+  if target ~= nil and type(target) ~= "string" then
+    util.notify("target must be a string or nil", vim.log.levels.ERROR)
+    return false
+  end
+  if target == "" then
+    target = nil
+  end
+
+  return cli.run(path, cfg, target, function(result)
     if not result or result.code ~= 0 then
       local code = result and result.code or -1
       local output = "no error output"

@@ -4,8 +4,13 @@ end
 vim.g.loaded_mo_markdown_preview = 1
 
 vim.api.nvim_create_user_command("MoPreview", function(opts)
-  require("mo-markdown-preview").preview({ force = opts.bang })
+  local target = vim.trim(opts.args)
+  require("mo-markdown-preview").preview({
+    force = opts.bang,
+    target = target ~= "" and target or nil,
+  })
 end, {
   bang = true,
-  desc = "Preview the current markdown buffer with mo",
+  nargs = "?",
+  desc = "Preview the current markdown buffer with mo [target]",
 })

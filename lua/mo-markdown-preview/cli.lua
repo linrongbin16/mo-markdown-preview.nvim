@@ -33,19 +33,35 @@ local function normalize_path(path)
   return normalized
 end
 
+--- Build the default group name for a file.
+---
+--- The group is stable per absolute path and unique across files with the same
+--- basename. The 8-character hash mirrors the id mo uses for file entries.
+---@param path string
+---@return string
+local function default_target(path)
+  local absolute = vim.fn.fnamemodify(path, ":p")
+  local name = vim.fn.fnamemodify(path, ":t")
+  return string.format("%s-%s", name, vim.fn.sha256(absolute):sub(1, 8))
+end
+
 --- Build the `mo` command used to add a file to the preview server.
 ---@param path string
 ---@param cfg table
+---@param target string|nil
 ---@return string[]
-function M.command(path, cfg)
+function M.command(path, cfg, target)
   local cmd = { cfg.cmd }
 
   if cfg.port then
     vim.list_extend(cmd, { "--port", tostring(cfg.port) })
   end
-  if cfg.target then
-    vim.list_extend(cmd, { "--target", cfg.target })
+
+  local group = target
+  if group == nil or group == "" then
+    group = default_target(path)
   end
+  vim.list_extend(cmd, { "--target", group })
 
   vim.list_extend(cmd, { "--no-open", "--json", path })
   return cmd
@@ -106,9 +122,10 @@ end
 --- Run mo to add a file and return its preview URL through `callback`.
 ---@param path string
 ---@param cfg table
+---@param target string|nil
 ---@param callback fun(result: table)
 ---@return boolean started
-function M.run(path, cfg, callback)
+function M.run(path, cfg, target, callback)
   local exe, err = executable(cfg)
   if not exe then
     vim.schedule(function()
@@ -121,7 +138,7 @@ function M.run(path, cfg, callback)
     return false
   end
 
-  local cmd = M.command(path, cfg)
+  local cmd = M.command(path, cfg, target)
   cmd[1] = exe
 
   local ok, proc = pcall(vim.system, cmd, {

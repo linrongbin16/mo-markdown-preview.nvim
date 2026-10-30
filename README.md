@@ -12,7 +12,9 @@ contents to a temporary file or sync unsaved changes to `mo`.
 - `:MoPreview` command for the current buffer.
 - Uses the real file on disk, so `mo`'s native live-reload works on save.
 - Opens the exact file's deeplink, not just the `mo` server root.
-- Supports `mo` groups (`--target`) and custom ports.
+- Supports `mo` groups and custom ports.
+- Puts each file in its own `mo` group by default; pass an optional target to
+  share a group explicitly.
 - No Node.js build step and no custom preview server to manage.
 - No temporary files, autocmds, or buffer synchronization.
 
@@ -77,8 +79,20 @@ Open a Markdown file and run:
 ```
 
 The default browser opens on that file in `mo`. Running `:MoPreview` again adds
-the same file to the `mo` group (deduplicated by absolute path) and opens its
-URL again.
+the same file to its group (deduplicated by absolute path) and opens its URL
+again.
+
+By default each file gets its own group named
+`<basename>-<sha256(abs_path)[1:8]>`, so opening several Markdown files does not
+mix them in one `mo` sidebar. Pass an optional target to choose a group
+yourself:
+
+```vim
+:MoPreview docs
+:MoPreview! docs
+```
+
+Use `:MoPreview default` to share `mo`'s default group with other tools.
 
 `:MoPreview!` bypasses the `filetypes` check, which is useful for a
 `markdown`-like file whose filetype was not detected:
@@ -106,9 +120,6 @@ require("mo-markdown-preview").setup({
   -- Command used to run mo: name on $PATH or absolute path.
   cmd = "mo",
 
-  -- mo group name (--target). nil uses mo's "default" group.
-  target = nil,
-
   -- mo server port. nil uses mo's default port (6275).
   port = nil,
 
@@ -126,7 +137,6 @@ require("mo-markdown-preview").setup({
 | Option | Default | Description |
 | --- | --- | --- |
 | `cmd` | `"mo"` | Command used to run mo: name or absolute path. |
-| `target` | `nil` | `mo --target` group. `nil` means the default group. |
 | `port` | `nil` | `mo --port`. `nil` means `mo`'s default (`6275`). |
 | `filetypes` | Markdown + MDX | Buffer filetypes accepted by `:MoPreview`. Empty table allows all. |
 | `open_browser` | `true` | Open the URL in the default browser. Set `false` to only show the URL. |
@@ -136,15 +146,19 @@ The Lua API is also available:
 
 ```lua
 local preview = require("mo-markdown-preview")
-preview.preview()              -- current buffer
-preview.preview({ bufnr = 3 }) -- another buffer
+preview.preview()                            -- current buffer
+preview.preview({ bufnr = 3 })               -- another buffer
+preview.preview({ target = "docs" })         -- explicit mo group
+preview.preview({ bufnr = 3, target = "api" })
 ```
 
 ## How it works
 
 1. Get the file name from the current buffer with `nvim_buf_get_name`.
 2. Check that the path exists and is readable. If not, report an error.
-3. Run `mo --no-open --json [--port PORT] [--target GROUP] <file>`.
+3. Run
+   `mo --no-open --json [--port PORT] --target GROUP <file>`. When no target is
+   given, `GROUP` is `<basename>-<sha256(abs_path)[1:8]>`.
 4. Parse `mo`'s JSON output, find the deeplink for `<file>`, and open it with
    `vim.ui.open` or `browser_func`.
 
