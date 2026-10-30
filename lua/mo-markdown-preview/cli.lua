@@ -112,12 +112,12 @@ function M.find_url(data, path)
   return nil
 end
 
---- Add a file to mo and return its preview URL through `callback`.
+--- Run mo to add a file and return its preview URL through `callback`.
 ---@param path string
 ---@param cfg table
 ---@param callback fun(result: table)
 ---@return boolean started
-function M.preview(path, cfg, callback)
+function M.run(path, cfg, callback)
   local exe, err = executable(cfg)
   if not exe then
     vim.schedule(function()

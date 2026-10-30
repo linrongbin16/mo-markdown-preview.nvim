@@ -87,7 +87,7 @@ function M.preview(opts)
   end
 
   local cfg = config.get()
-  return cli.preview(path, cfg, function(result)
+  return cli.run(path, cfg, function(result)
     if not result or result.code ~= 0 then
       local code = result and result.code or -1
       local output = "no error output"
