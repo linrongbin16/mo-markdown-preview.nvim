@@ -1,8 +1,8 @@
 local M = {}
 
 M.defaults = {
-  -- Executable used to talk to mo. Can be an absolute path or a name on $PATH.
-  mo = "mo",
+  -- Command used to talk to mo. Can be an absolute path or a name on $PATH.
+  cmd = "mo",
 
   -- mo group (--target). nil means mo's "default" group.
   target = nil,
@@ -28,8 +28,8 @@ local function invalid(name, expected)
 end
 
 local function validate(opts)
-  if opts.mo ~= nil and (type(opts.mo) ~= "string" or opts.mo == "") then
-    invalid("mo", "a non-empty string")
+  if opts.cmd ~= nil and (type(opts.cmd) ~= "string" or opts.cmd == "") then
+    invalid("cmd", "a non-empty string")
   end
 
   if opts.target ~= nil and (type(opts.target) ~= "string" or opts.target == "") then

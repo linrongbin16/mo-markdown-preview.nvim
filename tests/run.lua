@@ -116,7 +116,7 @@ local function setup(extra)
   notified = {}
 
   local opts = {
-    mo = fake_mo,
+    cmd = fake_mo,
     port = 6123,
     target = "nvim-test",
     browser_func = function(url)
@@ -285,7 +285,7 @@ test("reports a failing mo invocation and can retry", function()
 end)
 
 test("reports a missing mo executable", function()
-  setup({ mo = tmp .. "/does-not-exist" })
+  setup({ cmd = tmp .. "/does-not-exist" })
   local path = tmp .. "/missing-mo.md"
   open_buffer(path, "# Missing mo\n")
 
@@ -297,6 +297,7 @@ test("reports a missing mo executable", function()
 end)
 
 test("validates configuration", function()
+  check(not pcall(preview.setup, { cmd = "" }), "cmd must not be empty")
   check(not pcall(preview.setup, { port = 0 }), "port 0 should be rejected")
   check(not pcall(preview.setup, { filetypes = "markdown" }), "filetypes must be a table")
   check(not pcall(preview.setup, { target = 123 }), "target must be a string or nil")

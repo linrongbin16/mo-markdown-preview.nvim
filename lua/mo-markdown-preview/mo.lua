@@ -3,13 +3,13 @@ local M = {}
 local uv = vim.uv or vim.loop
 
 local function executable(cfg)
-  local name = vim.fn.expand(cfg.mo)
+  local name = vim.fn.expand(cfg.cmd)
   local exe = vim.fn.exepath(name)
   if exe == "" or vim.fn.executable(exe) ~= 1 then
     local message = string.format(
       "could not find the 'mo' executable (%s). "
-        .. "Install it from https://github.com/k1LoW/mo or set `mo` in the plugin setup.",
-      cfg.mo
+        .. "Install it from https://github.com/k1LoW/mo or set `cmd` in the plugin setup.",
+      cfg.cmd
     )
     return nil, message
   end
@@ -47,7 +47,7 @@ end
 ---@param cfg table
 ---@return string[]
 function M.command(path, cfg)
-  local cmd = { cfg.mo }
+  local cmd = { cfg.cmd }
 
   if cfg.port then
     vim.list_extend(cmd, { "--port", tostring(cfg.port) })

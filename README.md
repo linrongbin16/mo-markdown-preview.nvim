@@ -20,7 +20,7 @@ contents to a temporary file or sync unsaved changes to `mo`.
 
 - Neovim 0.10 or newer (`vim.system` is required).
 - [`mo`](https://github.com/k1LoW/mo) 1.7.0 or newer, available as `mo` on
-  `$PATH` (or set `mo` in the setup).
+  `$PATH` (or set `cmd` in the setup).
   - `mo --json` is used to obtain the per-file preview URL.
 
 ## Installation
@@ -103,8 +103,8 @@ but unsaved edits are never sent to `mo`.
 
 ```lua
 require("mo-markdown-preview").setup({
-  -- mo executable name or absolute path.
-  mo = "mo",
+  -- Command used to run mo: name on $PATH or absolute path.
+  cmd = "mo",
 
   -- mo group name (--target). nil uses mo's "default" group.
   target = nil,
@@ -125,7 +125,7 @@ require("mo-markdown-preview").setup({
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `mo` | `"mo"` | `mo` executable name or path. |
+| `cmd` | `"mo"` | Command used to run mo: name or absolute path. |
 | `target` | `nil` | `mo --target` group. `nil` means the default group. |
 | `port` | `nil` | `mo --port`. `nil` means `mo`'s default (`6275`). |
 | `filetypes` | Markdown + MDX | Buffer filetypes accepted by `:MoPreview`. Empty table allows all. |
