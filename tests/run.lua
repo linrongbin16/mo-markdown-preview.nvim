@@ -264,26 +264,6 @@ test("can show the URL without opening a browser", function()
   check(opened == nil, "browser_func must not run when open_browser is false")
 end)
 
-test("falls back to jobstart without vim.system", function()
-  local system = vim.system
-  vim.system = nil
-  local ok, err = pcall(function()
-    setup()
-    local path = tmp .. "/fallback.md"
-    open_buffer(path, "# Fallback\n")
-
-    check(preview.preview(), "preview should start")
-    wait_for(function()
-      return opened ~= nil
-    end, "browser was not opened")
-    eq(last_arg(), path)
-  end)
-  vim.system = system
-  if not ok then
-    error(err, 0)
-  end
-end)
-
 test("reports a failing mo invocation and can retry", function()
   local path = tmp .. "/failure.md"
   open_buffer(path, "# Failure\n")

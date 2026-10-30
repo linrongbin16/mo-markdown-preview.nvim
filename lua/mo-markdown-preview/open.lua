@@ -1,33 +1,5 @@
 local M = {}
 
-local function fallback_command(url)
-  if vim.fn.has("win32") == 1 then
-    return { "rundll32", "url.dll,FileProtocolHandler", url }
-  end
-
-  if vim.fn.has("mac") == 1 or vim.fn.has("macunix") == 1 then
-    return { "open", url }
-  end
-
-  if vim.fn.has("wsl") == 1 then
-    if vim.fn.executable("wslview") == 1 then
-      return { "wslview", url }
-    end
-    if vim.fn.executable("cmd.exe") == 1 then
-      return { "cmd.exe", "/c", "start", "", url }
-    end
-  end
-
-  if vim.fn.executable("xdg-open") == 1 then
-    return { "xdg-open", url }
-  end
-  if vim.fn.executable("open") == 1 then
-    return { "open", url }
-  end
-
-  return nil
-end
-
 --- Open a URL in the user's browser.
 ---
 --- `opts` is the plugin configuration. A custom `browser_func` always wins.
@@ -50,26 +22,19 @@ function M.open(url, opts)
     return true
   end
 
-  local ui_err
-  if vim.ui and vim.ui.open then
-    local ok, proc, err = pcall(vim.ui.open, url)
-    if ok and proc ~= nil then
-      return true
-    end
-    ui_err = ok and err or tostring(proc)
+  if not vim.ui.open then
+    return false, "vim.ui.open is not available"
   end
 
-  local cmd = fallback_command(url)
-  if not cmd then
-    return false, ui_err or "no URL opener found; set browser_func or open_browser = false"
+  local ok, proc, err = pcall(vim.ui.open, url)
+  if not ok then
+    return false, tostring(proc)
   end
-
-  local ok, job = pcall(vim.fn.jobstart, cmd, { detach = true })
-  if ok and job > 0 then
+  if proc ~= nil then
     return true
   end
 
-  return false, "failed to launch " .. cmd[1]
+  return false, err or "could not open URL"
 end
 
 return M

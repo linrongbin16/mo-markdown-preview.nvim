@@ -123,65 +123,23 @@ local function schedule_callback(callback, result)
 end
 
 local function run_async(cmd, callback)
-  if vim.system then
-    local ok, proc = pcall(vim.system, cmd, {
-      text = true,
-      timeout = 30000,
-      cwd = vim.fn.getcwd(),
-    }, function(obj)
-      schedule_callback(callback, obj)
-    end)
-
-    if not ok then
-      schedule_callback(callback, {
-        code = -1,
-        stdout = "",
-        stderr = tostring(proc),
-      })
-    end
-    return ok
-  end
-
-  -- Neovim < 0.10 fallback.
-  local stdout = {}
-  local stderr = {}
-
-  local function join(lines)
-    if type(lines) ~= "table" then
-      return ""
-    end
-    return table.concat(lines, "\n")
-  end
-
-  local ok, job = pcall(vim.fn.jobstart, cmd, {
+  local ok, proc = pcall(vim.system, cmd, {
+    text = true,
+    timeout = 30000,
     cwd = vim.fn.getcwd(),
-    stdout_buffered = true,
-    stderr_buffered = true,
-    on_stdout = function(_, data)
-      stdout = data or {}
-    end,
-    on_stderr = function(_, data)
-      stderr = data or {}
-    end,
-    on_exit = function(_, code)
-      schedule_callback(callback, {
-        code = code,
-        stdout = join(stdout),
-        stderr = join(stderr),
-      })
-    end,
-  })
+  }, function(obj)
+    schedule_callback(callback, obj)
+  end)
 
-  if not ok or job <= 0 then
+  if not ok then
     schedule_callback(callback, {
       code = -1,
       stdout = "",
-      stderr = "failed to start mo",
+      stderr = tostring(proc),
     })
-    return false
   end
 
-  return true
+  return ok
 end
 
 --- Add a file to mo and return its preview URL through `callback`.

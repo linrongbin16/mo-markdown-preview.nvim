@@ -18,7 +18,7 @@ contents to a temporary file or sync unsaved changes to `mo`.
 
 ## Requirements
 
-- Neovim 0.9 or newer (0.10+ recommended).
+- Neovim 0.10 or newer (`vim.system` is required).
 - [`mo`](https://github.com/k1LoW/mo) 1.7.0 or newer, available as `mo` on
   `$PATH` (or set `mo` in the setup).
   - `mo --json` is used to obtain the per-file preview URL.
@@ -146,7 +146,7 @@ preview.preview({ bufnr = 3 }) -- another buffer
 2. Check that the path exists and is readable. If not, report an error.
 3. Run `mo --no-open --json [--port PORT] [--target GROUP] <file>`.
 4. Parse `mo`'s JSON output, find the deeplink for `<file>`, and open it with
-   `vim.ui.open`, `browser_func`, or a platform opener.
+   `vim.ui.open` or `browser_func`.
 
 No file is written, no buffer contents are copied, and no autocmds are
 installed. `mo` reads the file from disk and handles reloading when Neovim saves
