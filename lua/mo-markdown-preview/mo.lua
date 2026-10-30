@@ -112,31 +112,25 @@ function M.find_url(data, path)
   return nil
 end
 
-local function schedule_callback(callback, result)
-  local ok = pcall(vim.schedule, function()
-    callback(result)
-  end)
-  if not ok then
-    -- The event loop is going away (e.g. Neovim is exiting). Dropping the
-    -- result is fine at that point.
-  end
-end
-
 local function run_async(cmd, callback)
   local ok, proc = pcall(vim.system, cmd, {
     text = true,
     timeout = 30000,
     cwd = vim.fn.getcwd(),
   }, function(obj)
-    schedule_callback(callback, obj)
+    pcall(vim.schedule, function()
+      callback(obj)
+    end)
   end)
 
   if not ok then
-    schedule_callback(callback, {
-      code = -1,
-      stdout = "",
-      stderr = tostring(proc),
-    })
+    pcall(vim.schedule, function()
+      callback({
+        code = -1,
+        stdout = "",
+        stderr = tostring(proc),
+      })
+    end)
   end
 
   return ok
@@ -150,11 +144,13 @@ end
 function M.preview(path, cfg, callback)
   local exe, err = executable(cfg)
   if not exe then
-    schedule_callback(callback, {
-      code = -1,
-      stdout = "",
-      stderr = err,
-    })
+    pcall(vim.schedule, function()
+      callback({
+        code = -1,
+        stdout = "",
+        stderr = err,
+      })
+    end)
     return false
   end
 
