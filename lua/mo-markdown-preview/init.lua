@@ -1,23 +1,9 @@
 local config = require("mo-markdown-preview.config")
 local cli = require("mo-markdown-preview.cli")
 local opener = require("mo-markdown-preview.open")
+local util = require("mo-markdown-preview.util")
 
 local M = {}
-
-local function notify(message, level)
-  vim.notify(message, level or vim.log.levels.INFO, { title = "mo-markdown-preview" })
-end
-
-local function trim(value)
-  if type(value) ~= "string" then
-    return ""
-  end
-  value = value:gsub("^%s+", ""):gsub("%s+$", "")
-  if #value > 1200 then
-    value = value:sub(1, 1200) .. "..."
-  end
-  return value
-end
 
 local function supported(bufnr, force)
   if force then
@@ -65,12 +51,12 @@ function M.preview(opts)
   local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
 
   if not vim.api.nvim_buf_is_valid(bufnr) then
-    notify("invalid buffer", vim.log.levels.ERROR)
+    util.notify("invalid buffer", vim.log.levels.ERROR)
     return false
   end
 
   if not supported(bufnr, opts.force) then
-    notify(
+    util.notify(
       string.format(
         "filetype %q is not enabled for preview; use :MoPreview! or add it to `filetypes`",
         vim.bo[bufnr].filetype
@@ -82,7 +68,7 @@ function M.preview(opts)
 
   local path, path_err = buffer_file(bufnr)
   if not path then
-    notify(path_err, vim.log.levels.ERROR)
+    util.notify(path_err, vim.log.levels.ERROR)
     return false
   end
 
@@ -98,30 +84,30 @@ function M.preview(opts)
           output = result.stdout
         end
       end
-      notify(string.format("mo exited with code %s: %s", tostring(code), trim(output)), vim.log.levels.ERROR)
+      util.notify(string.format("mo exited with code %s: %s", tostring(code), util.trim(output)), vim.log.levels.ERROR)
       return
     end
 
     local data, decode_err = cli.decode(result.stdout)
     if not data then
-      notify(decode_err, vim.log.levels.ERROR)
+      util.notify(decode_err, vim.log.levels.ERROR)
       return
     end
 
     local url = cli.find_url(data, path)
     if not url then
-      notify(string.format("mo did not return a preview URL for %s", path), vim.log.levels.ERROR)
+      util.notify(string.format("mo did not return a preview URL for %s", path), vim.log.levels.ERROR)
       return
     end
 
     local opened, open_err = opener.open(url, cfg)
     if not opened then
-      notify(
+      util.notify(
         string.format("preview ready at %s (could not open browser: %s)", url, tostring(open_err)),
         vim.log.levels.WARN
       )
     elseif not cfg.open_browser then
-      notify("preview: " .. url, vim.log.levels.INFO)
+      util.notify("preview: " .. url, vim.log.levels.INFO)
     end
   end)
 end

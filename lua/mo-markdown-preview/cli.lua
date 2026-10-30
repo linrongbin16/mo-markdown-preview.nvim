@@ -1,3 +1,5 @@
+local util = require("mo-markdown-preview.util")
+
 local M = {}
 
 local uv = vim.uv or vim.loop
@@ -31,17 +33,6 @@ local function normalize_path(path)
   return normalized
 end
 
-local function trim(value)
-  if type(value) ~= "string" then
-    return ""
-  end
-  value = value:gsub("^%s+", ""):gsub("%s+$", "")
-  if #value > 1200 then
-    value = value:sub(1, 1200) .. "..."
-  end
-  return value
-end
-
 --- Build the `mo` command used to add a file to the preview server.
 ---@param path string
 ---@param cfg table
@@ -71,10 +62,10 @@ function M.decode(stdout)
 
   local ok, decoded = pcall(vim.json.decode, stdout)
   if not ok then
-    return nil, "could not decode mo's JSON output: " .. trim(stdout)
+    return nil, "could not decode mo's JSON output: " .. util.trim(stdout)
   end
   if type(decoded) ~= "table" then
-    return nil, "unexpected mo output: " .. trim(stdout)
+    return nil, "unexpected mo output: " .. util.trim(stdout)
   end
 
   return decoded
