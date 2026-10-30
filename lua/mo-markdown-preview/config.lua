@@ -1,3 +1,5 @@
+local util = require("mo-markdown-preview.util")
+
 local M = {}
 
 M.defaults = {
@@ -24,16 +26,17 @@ M.defaults = {
 local current = vim.deepcopy(M.defaults)
 
 local function invalid(name, expected)
-  error(string.format("mo-markdown-preview: '%s' must be %s", name, expected), 3)
+  util.notify(string.format("mo-markdown-preview: '%s' must be %s", name, expected), vim.log.levels.ERROR)
+  return false
 end
 
 local function validate(opts)
   if opts.cmd ~= nil and (type(opts.cmd) ~= "string" or opts.cmd == "") then
-    invalid("cmd", "a non-empty string")
+    return invalid("cmd", "a non-empty string")
   end
 
   if opts.target ~= nil and (type(opts.target) ~= "string" or opts.target == "") then
-    invalid("target", "a non-empty string or nil")
+    return invalid("target", "a non-empty string or nil")
   end
 
   if
@@ -45,27 +48,29 @@ local function validate(opts)
       or opts.port > 65535
     )
   then
-    invalid("port", "an integer between 1 and 65535, or nil")
+    return invalid("port", "an integer between 1 and 65535, or nil")
   end
 
   if opts.filetypes ~= nil then
     if type(opts.filetypes) ~= "table" then
-      invalid("filetypes", "a table of filetype strings")
+      return invalid("filetypes", "a table of filetype strings")
     end
     for _, filetype in ipairs(opts.filetypes) do
       if type(filetype) ~= "string" or filetype == "" then
-        invalid("filetypes", "a table of non-empty filetype strings")
+        return invalid("filetypes", "a table of non-empty filetype strings")
       end
     end
   end
 
   if opts.open_browser ~= nil and type(opts.open_browser) ~= "boolean" then
-    invalid("open_browser", "a boolean")
+    return invalid("open_browser", "a boolean")
   end
 
   if opts.browser_func ~= nil and type(opts.browser_func) ~= "function" then
-    invalid("browser_func", "a function or nil")
+    return invalid("browser_func", "a function or nil")
   end
+
+  return true
 end
 
 --- Update the plugin configuration.
@@ -73,7 +78,9 @@ end
 ---@return table
 function M.setup(opts)
   opts = opts or {}
-  validate(opts)
+  if not validate(opts) then
+    return current
+  end
   -- A shallow merge is intentional: options such as `filetypes` are lists and
   -- should be replaced wholesale instead of being merged index by index.
   current = vim.tbl_extend("force", vim.deepcopy(M.defaults), opts)

@@ -296,12 +296,22 @@ test("reports a missing mo executable", function()
   check(opened == nil, "browser must not open")
 end)
 
-test("validates configuration", function()
-  check(not pcall(preview.setup, { cmd = "" }), "cmd must not be empty")
-  check(not pcall(preview.setup, { port = 0 }), "port 0 should be rejected")
-  check(not pcall(preview.setup, { filetypes = "markdown" }), "filetypes must be a table")
-  check(not pcall(preview.setup, { target = 123 }), "target must be a string or nil")
-  check(not pcall(preview.setup, { open_browser = "yes" }), "open_browser must be a boolean")
+test("reports invalid configuration without applying it", function()
+  local before = config.get()
+
+  local function expect_invalid(opts, field)
+    notified = {}
+    local after = preview.setup(opts)
+    contains(notified_text(), field)
+    eq(notified[1].level, vim.log.levels.ERROR)
+    eq(after, before)
+  end
+
+  expect_invalid({ cmd = "" }, "cmd")
+  expect_invalid({ port = 0 }, "port")
+  expect_invalid({ filetypes = "markdown" }, "filetypes")
+  expect_invalid({ target = 123 }, "target")
+  expect_invalid({ open_browser = "yes" }, "open_browser")
 end)
 
 vim.notify = original_notify
