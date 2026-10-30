@@ -118,13 +118,13 @@ local function run_async(cmd, callback)
     timeout = 30000,
     cwd = vim.fn.getcwd(),
   }, function(obj)
-    pcall(vim.schedule, function()
+    vim.schedule(function()
       callback(obj)
     end)
   end)
 
   if not ok then
-    pcall(vim.schedule, function()
+    vim.schedule(function()
       callback({
         code = -1,
         stdout = "",
@@ -144,7 +144,7 @@ end
 function M.preview(path, cfg, callback)
   local exe, err = executable(cfg)
   if not exe then
-    pcall(vim.schedule, function()
+    vim.schedule(function()
       callback({
         code = -1,
         stdout = "",
