@@ -1,5 +1,5 @@
 local config = require("mo-markdown-preview.config")
-local mo = require("mo-markdown-preview.mo")
+local cli = require("mo-markdown-preview.cli")
 local opener = require("mo-markdown-preview.open")
 
 local M = {}
@@ -87,7 +87,7 @@ function M.preview(opts)
   end
 
   local cfg = config.get()
-  return mo.preview(path, cfg, function(result)
+  return cli.preview(path, cfg, function(result)
     if not result or result.code ~= 0 then
       local code = result and result.code or -1
       local output = "no error output"
@@ -102,13 +102,13 @@ function M.preview(opts)
       return
     end
 
-    local data, decode_err = mo.decode(result.stdout)
+    local data, decode_err = cli.decode(result.stdout)
     if not data then
       notify(decode_err, vim.log.levels.ERROR)
       return
     end
 
-    local url = mo.find_url(data, path)
+    local url = cli.find_url(data, path)
     if not url then
       notify(string.format("mo did not return a preview URL for %s", path), vim.log.levels.ERROR)
       return
