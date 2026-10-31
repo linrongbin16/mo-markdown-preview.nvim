@@ -16,9 +16,10 @@ function M.trim(value)
 	if type(value) ~= "string" then
 		return ""
 	end
+	local max_len = 120
 	value = value:gsub("^%s+", ""):gsub("%s+$", "")
-	if #value > 1200 then
-		value = value:sub(1, 1200) .. "..."
+	if #value > max_len then
+		value = value:sub(1, max_len) .. "..."
 	end
 	return value
 end
