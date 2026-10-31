@@ -17,7 +17,7 @@ contents to a temporary file or sync unsaved changes to `mo`.
 - Supports `mo` groups and custom ports.
 - Per-call flags `--target`, `--port`, and `--no-open`/`--open` override the
   configured target, port, and open.
-- Puts each file in its own `mo` group named after its full path by default;
+- Puts each file in its own `mo` group named after its URI-encoded full path;
   pass `--target` to share a group explicitly.
 
 ## Requirements
@@ -76,11 +76,14 @@ again.
 
 By default each file gets its own group named after its full path (with forward
 slashes on Windows), so opening several files does not mix them in one `mo`
-sidebar.
+sidebar. The path is URI-encoded with the RFC 3986 rules: URL-path characters
+(letters, digits, and symbols such as `-._~/:&+=`) are kept, and everything else
+(spaces, CJK characters, `?`, `#`, `%`, control characters) becomes `%XX`, for
+example a space becomes `%20` and `中` becomes `%E4%B8%AD`.
 
 All flags are optional. With no flags, `target`, `port`, and `open` come from
 the plugin configuration (`config.lua` defaults, optionally overridden by
-`setup()`); a nil `target` uses the file's full path.
+`setup()`); a nil `target` uses the URI-encoded full path.
 
 Pass `--target` to choose a group yourself:
 
@@ -138,7 +141,7 @@ require("mo-markdown-preview").setup({
   -- Command used to run mo: name on $PATH or absolute path.
   cmd = "mo",
 
-  -- Default mo group. nil uses the file's full path.
+  -- Default mo group. nil uses the URI-encoded full path.
   -- Overridden by --target for one call.
   target = nil,
 
@@ -155,7 +158,7 @@ require("mo-markdown-preview").setup({
 | Option   | Default | Description                                                              |
 | -------- | ------- | ------------------------------------------------------------------------ |
 | `cmd`    | `"mo"`  | Command used to run mo: name or absolute path.                           |
-| `target` | `nil`   | Default mo group. `nil` uses the file's full path.                       |
+| `target` | `nil`   | Default mo group. `nil` uses the URI-encoded full path.                  |
 | `port`   | `nil`   | `mo --port`. `nil` means `mo`'s default (`6275`). `--port` overrides it. |
 | `open`   | `true`  | Open the URL in the default browser. Set `false` to only show the URL.   |
 
@@ -184,7 +187,8 @@ preview.preview({ target = "docs", port = 6276, open = false })
    `mo --no-open --json [--port PORT] --target GROUP <file>`. `PORT` comes from
    `--port`, then the `port` option. `GROUP` comes from `--target`, then the
    `target` option; when both are nil, `GROUP` is the file's full path (with
-   forward slashes on Windows).
+   forward slashes on Windows) URI-encoded with RFC 3986; URL-path characters
+   are kept and everything else becomes `%XX`.
 4. Parse `mo`'s JSON output, find the deeplink for `<file>`, and open it with
    `vim.ui.open`. With `--no-open` (or `open = false`) the URL is only reported;
    `--open` forces the browser open.
@@ -199,10 +203,13 @@ across invocations. Use `mo --shutdown` to stop it.
 
 ## Notes and limitations
 
-- The default group is the file's full path. `mo` rejects `?`, `#`, `\`, and
-  control characters in group names, and paths with spaces or non-ASCII
-  characters may not select the right group; pass an explicit `--target` for
-  such files.
+- The default group is the URI-encoded full path. Characters allowed in a URL
+  path (letters, digits, and symbols such as `-._~/:&+=`) are kept; spaces, CJK
+  characters, `?`, `#`, `%`, and control characters become `%XX` (a space becomes
+  `%20`, `中` becomes `%E4%B8%AD`). The `mo` sidebar shows the encoded group
+  name, while file entries keep their real names. Encoding matters because `mo`
+  compares the group name with the percent-encoded URL path without decoding it,
+  and it is injective, so distinct files always get distinct groups.
 - Unsaved changes are not previewed. Save the file and let `mo` reload it.
 - Buffers without a file on disk (unnamed buffers, `oil://`, terminal buffers,
   and so on) are rejected with an error message.

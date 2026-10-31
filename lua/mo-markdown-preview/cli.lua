@@ -35,12 +35,18 @@ end
 
 --- Build the default group name for a file.
 ---
---- The full path is used as the group name. Backslashes become forward slashes
---- because mo rejects them in group names.
+--- The full path is URI-encoded with Neovim's RFC 3986 encoder, which keeps
+--- URL-path characters (including sub-delims) and percent-encodes the rest.
+--- Escapes are uppercased to keep the URL canonical. Percent-encoding is
+--- injective, so distinct files always get distinct group names.
 ---@param path string
 ---@return string
 local function default_target(path)
-  return vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
+  local absolute = vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
+  local encoded = vim.uri_encode(absolute, "rfc3986")
+  return (encoded:gsub("%%(%x%x)", function(hex)
+    return "%" .. hex:upper()
+  end))
 end
 
 --- Build the `mo` command used to add a file to the preview server.

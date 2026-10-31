@@ -343,7 +343,7 @@ test("rejects invalid command arguments before running mo", function()
   eq(log_text(), "", "mo must not run for invalid arguments")
 end)
 
-test("uses the full file path as the default target", function()
+test("URI-encodes the full file path as the default target", function()
   local cfg = config.get()
   local cwd = vim.fs.normalize(vim.fn.getcwd())
   local home = vim.fs.normalize(vim.fn.expand("~"))
@@ -357,6 +357,61 @@ test("uses the full file path as the default target", function()
   eq(target_arg(cli.command(cwd .. "/docs/README.md", cfg, nil)), expected(cwd .. "/docs/README.md"))
   eq(target_arg(cli.command(home .. "/.config/test.md", cfg, nil)), expected(home .. "/.config/test.md"))
   eq(target_arg(cli.command(outside, cfg, nil)), expected(outside))
+end)
+
+test("percent-encodes unsafe characters and keeps targets unique", function()
+  local cfg = config.get()
+  local root = vim.fs.normalize(vim.fn.getcwd())
+
+  local function target(path)
+    return target_arg(cli.command(path, cfg, nil))
+  end
+
+  local question = root .. "/what?.md"
+  eq(target(question), root .. "/what%3F.md")
+
+  local issue = root .. "/issue#42.md"
+  eq(target(issue), root .. "/issue%2342.md")
+
+  local space = root .. "/my notes.md"
+  eq(target(space), root .. "/my%20notes.md")
+
+  local cjk = root .. "/中文笔记.md"
+  eq(target(cjk), root .. "/%E4%B8%AD%E6%96%87%E7%AC%94%E8%AE%B0.md")
+
+  local accent = root .. "/café.md"
+  eq(target(accent), root .. "/caf%C3%A9.md")
+
+  local emoji = root .. "/🔥.md"
+  eq(target(emoji), root .. "/%F0%9F%94%A5.md")
+
+  local percent = root .. "/100% done.md"
+  eq(target(percent), root .. "/100%25%20done.md")
+
+  local colon = root .. "/a:b/c d.md"
+  eq(target(colon), root .. "/a:b/c%20d.md")
+
+  -- RFC 3986 characters allowed in a URL path are kept as-is.
+  local symbols = root .. "/a&b=c@d;e,f+g$h!i'j(k)l.md"
+  eq(target(symbols), symbols)
+
+  local tab = root .. "/tab\tname.md"
+  eq(target(tab), root .. "/tab%09name.md")
+
+  local ctrl = root .. "/ctrl\1name.md"
+  eq(target(ctrl), root .. "/ctrl%01name.md")
+
+  if vim.fn.has("win32") == 0 then
+    local backslash = root .. "/back\\slash.md"
+    eq(target(backslash), root .. "/back%5Cslash.md")
+  end
+
+  -- Percent-encoding is injective, so similar names stay distinct.
+  local first = target(root .. "/a?b.md")
+  local second = target(root .. "/a_b.md")
+  check(first ~= second, "different paths must not collapse to the same target")
+  contains(first, "a%3Fb.md")
+  contains(second, "a_b.md")
 end)
 
 test("does not sync modified buffer contents", function()
