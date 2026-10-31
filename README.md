@@ -15,25 +15,14 @@ contents to a temporary file or sync unsaved changes to `mo`.
 - Supports `mo` groups and custom ports.
 - Puts each file in its own `mo` group by default; pass an optional target to
   share a group explicitly.
-- No Node.js build step and no custom preview server to manage.
-- No temporary files, autocmds, or buffer synchronization.
 
 ## Requirements
 
 - Neovim 0.10 or newer (`vim.system` is required).
 - [`mo`](https://github.com/k1LoW/mo) 1.7.0 or newer, available as `mo` on
   `$PATH` (or set `cmd` in the setup).
-  - `mo --json` is used to obtain the per-file preview URL.
 
 ## Installation
-
-Install `mo` first:
-
-```sh
-brew install k1LoW/tap/mo
-```
-
-Or download a binary from the [releases page](https://github.com/k1LoW/mo/releases).
 
 ### lazy.nvim
 
@@ -141,13 +130,13 @@ require("mo-markdown-preview").setup({
 })
 ```
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `cmd` | `"mo"` | Command used to run mo: name or absolute path. |
-| `port` | `nil` | `mo --port`. `nil` means `mo`'s default (`6275`). |
-| `filetypes` | Markdown + MDX | Buffer filetypes accepted by `:MoPreview`. Empty table allows all. |
-| `open_browser` | `true` | Open the URL in the default browser. Set `false` to only show the URL. |
-| `browser_func` | `nil` | `function(url)` used instead of `vim.ui.open`. |
+| Option         | Default        | Description                                                            |
+| -------------- | -------------- | ---------------------------------------------------------------------- |
+| `cmd`          | `"mo"`         | Command used to run mo: name or absolute path.                         |
+| `port`         | `nil`          | `mo --port`. `nil` means `mo`'s default (`6275`).                      |
+| `filetypes`    | Markdown + MDX | Buffer filetypes accepted by `:MoPreview`. Empty table allows all.     |
+| `open_browser` | `true`         | Open the URL in the default browser. Set `false` to only show the URL. |
+| `browser_func` | `nil`          | `function(url)` used instead of `vim.ui.open`.                         |
 
 The Lua API is also available:
 
