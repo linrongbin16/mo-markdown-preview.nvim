@@ -2,23 +2,15 @@ local M = {}
 
 --- Open a URL in the user's browser.
 ---
---- `opts` is the plugin configuration. A custom `browser_func` always wins.
---- Setting `open_browser = false` makes this a no-op so the caller can show
---- the URL instead (useful over SSH or in headless environments).
+--- `opts` is the plugin configuration. Setting `open = false` makes this a
+--- no-op so the caller can show the URL instead (useful over SSH or in
+--- headless environments).
 ---@param url string
 ---@param opts table
 ---@return boolean ok
 ---@return string|nil err
 function M.open(url, opts)
-  if opts.open_browser == false then
-    return true
-  end
-
-  if opts.browser_func then
-    local ok, err = pcall(opts.browser_func, url)
-    if not ok then
-      return false, tostring(err)
-    end
+  if opts.open == false then
     return true
   end
 

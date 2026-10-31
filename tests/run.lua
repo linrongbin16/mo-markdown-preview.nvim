@@ -21,6 +21,11 @@ local original_notify = vim.notify
 vim.notify = function(message, level)
   table.insert(notified, { message = message, level = level })
 end
+local original_ui_open = vim.ui.open
+vim.ui.open = function(url)
+  opened = url
+  return {}
+end
 
 local total = 0
 local failed = 0
@@ -113,10 +118,9 @@ local function notified_text()
   return table.concat(parts, "\n")
 end
 
-local function open_buffer(path, content, filetype)
+local function open_buffer(path, content)
   write_file(path, content)
   vim.cmd.edit(vim.fn.fnameescape(path))
-  vim.bo.filetype = filetype or "markdown"
   return vim.api.nvim_get_current_buf()
 end
 
@@ -128,9 +132,6 @@ local function setup(extra)
   local opts = {
     cmd = fake_mo,
     port = 6123,
-    browser_func = function(url)
-      opened = url
-    end,
   }
   for key, value in pairs(extra or {}) do
     opts[key] = value
@@ -171,6 +172,47 @@ test("registers the :MoPreview command", function()
   eq(vim.fn.exists(":MoPreview"), 2)
 end)
 
+test("parses --target, --port, --no-open, and --open", function()
+  local args = require("mo-markdown-preview.args")
+
+  local parsed, err = args.parse("")
+  eq(err, nil)
+  eq(next(parsed), nil, "no arguments should produce empty options")
+
+  parsed = assert(args.parse("--target docs --port 6276 --no-open"))
+  eq(parsed.target, "docs")
+  eq(parsed.port, 6276)
+  eq(parsed.open, false)
+
+  eq(assert(args.parse("--target=docs")).target, "docs")
+  eq(assert(args.parse("--port=6276")).port, 6276)
+  eq(assert(args.parse([[--target "my group"]])).target, "my group")
+  eq(assert(args.parse([[--target="my group"]])).target, "my group")
+  eq(assert(args.parse([[--target='my group']])).target, "my group")
+  eq(assert(args.parse("--no-open")).open, false)
+  eq(assert(args.parse("--open")).open, true)
+  eq(assert(args.parse("--no-open --open")).open, true)
+  eq(assert(args.parse("--open --no-open")).open, false)
+
+  local cases = {
+    { "--target", "--target" },
+    { "--port", "--port" },
+    { "--port nope", "invalid --port" },
+    { "--port 0", "invalid --port" },
+    { "--port 65536", "invalid --port" },
+    { "--no-open=1", "--no-open" },
+    { "--open=1", "--open" },
+    { "--bogus", "unknown option" },
+    { "docs", "use --target" },
+    { [[--target "unterminated]], "unterminated quote" },
+  }
+  for _, case in ipairs(cases) do
+    local value, case_err = args.parse(case[1])
+    eq(value, nil, "should reject: " .. case[1])
+    contains(case_err, case[2])
+  end
+end)
+
 test("passes the current file to mo", function()
   local path = tmp .. "/README.md"
   open_buffer(path, "# Hello\n")
@@ -196,7 +238,7 @@ test("accepts an explicit target argument", function()
   local path = tmp .. "/grouped.md"
   open_buffer(path, "# Grouped\n")
 
-  vim.cmd("MoPreview docs")
+  vim.cmd("MoPreview --target docs")
   wait_for(function()
     return opened ~= nil
   end, "browser was not opened")
@@ -206,6 +248,96 @@ test("accepts an explicit target argument", function()
   local default_target = target_arg(cli.command(path, config.get(), nil))
   check(default_target ~= nil, "default target should be present")
   check(not has_arg(default_target))
+end)
+
+test("applies --port and --no-open to one call", function()
+  local path = tmp .. "/flags.md"
+  open_buffer(path, "# Flags\n")
+
+  vim.cmd("MoPreview --port 6200 --no-open")
+  wait_for(function()
+    return notified_text():find("http://localhost:6275", 1, true) ~= nil
+  end, "preview URL was not reported")
+
+  check(has_arg("6200"), "--port value should be passed to mo")
+  check(has_arg("--no-open"), "mo should still run with --no-open")
+  eq(opened, nil, "browser must not open with --no-open")
+  eq(config.get().port, 6123, "--port must not change the configuration")
+  eq(config.get().open, true, "--no-open must not change the configuration")
+end)
+
+test("uses the configured target when --target is omitted", function()
+  setup({ target = "shared" })
+  local path = tmp .. "/configured-target.md"
+  open_buffer(path, "# Configured target\n")
+
+  vim.cmd("MoPreview")
+  wait_for(function()
+    return opened ~= nil
+  end, "browser was not opened")
+
+  eq(config.get().target, "shared")
+  check(has_arg("shared"), "configured target should be passed to mo")
+  local default_target = target_arg(cli.command(path, config.get(), nil))
+  check(default_target ~= nil, "default target should be present")
+  check(not has_arg(default_target), "built-in target must not be used")
+end)
+
+test("--target overrides the configured target", function()
+  setup({ target = "shared" })
+  local path = tmp .. "/target-override.md"
+  open_buffer(path, "# Target override\n")
+
+  vim.cmd("MoPreview --target docs")
+  wait_for(function()
+    return opened ~= nil
+  end, "browser was not opened")
+
+  check(has_arg("docs"), "--target should override the configured target")
+  check(not has_arg("shared"), "configured target must not be passed")
+end)
+
+test("accepts a quoted target value", function()
+  local path = tmp .. "/quoted.md"
+  open_buffer(path, "# Quoted\n")
+
+  vim.cmd([[MoPreview --target="my group" --no-open]])
+  wait_for(function()
+    return notified_text():find("http://localhost:6275", 1, true) ~= nil
+  end, "preview URL was not reported")
+
+  check(has_arg("my group"), "quoted target should reach mo as one argument")
+end)
+
+test("--open overrides open = false", function()
+  setup({ open = false })
+  local path = tmp .. "/force-open.md"
+  open_buffer(path, "# Force open\n")
+
+  vim.cmd("MoPreview --open")
+  wait_for(function()
+    return opened ~= nil
+  end, "browser was not opened")
+
+  eq(config.get().open, false, "--open must not change the configuration")
+end)
+
+test("rejects invalid command arguments before running mo", function()
+  local path = tmp .. "/bad-args.md"
+  open_buffer(path, "# Bad args\n")
+
+  vim.cmd("MoPreview --port nope")
+  contains(notified_text(), "invalid --port")
+
+  notified = {}
+  vim.cmd("MoPreview --unknown")
+  contains(notified_text(), "unknown option")
+
+  notified = {}
+  vim.cmd("MoPreview docs")
+  contains(notified_text(), "use --target")
+
+  eq(log_text(), "", "mo must not run for invalid arguments")
 end)
 
 test("derives target names from cwd, home, and absolute paths", function()
@@ -257,7 +389,6 @@ end)
 
 test("reports an error for an unnamed buffer", function()
   vim.cmd("enew")
-  vim.bo.filetype = "markdown"
 
   eq(preview.preview(), false, "preview should fail")
   contains(notified_text(), "no file name")
@@ -267,7 +398,6 @@ end)
 test("reports an error for a buffer with no file on disk", function()
   local path = tmp .. "/missing.md"
   vim.cmd.edit(vim.fn.fnameescape(path))
-  vim.bo.filetype = "markdown"
   check(vim.fn.filereadable(path) == 0, "the test file should not exist")
 
   eq(preview.preview(), false, "preview should fail")
@@ -293,31 +423,28 @@ test("finds the exact file when mo returns several files", function()
   eq(opened, "http://localhost:6275/?file=match")
 end)
 
-test("rejects unsupported filetypes unless forced", function()
+test("does not check the buffer filetype", function()
   local path = tmp .. "/notes.txt"
-  open_buffer(path, "plain text\n", "text")
+  open_buffer(path, "plain text\n")
+  vim.bo.filetype = "text"
 
-  eq(preview.preview(), false, "unsupported filetype should be rejected")
-  contains(notified_text(), "not enabled")
-  eq(log_text(), "", "mo must not run for a rejected buffer")
-
-  vim.cmd("MoPreview!")
+  check(preview.preview(), "preview should start for any filetype")
   wait_for(function()
     return opened ~= nil
-  end, "forced preview should start")
+  end, "browser was not opened")
   eq(last_arg(), path)
 end)
 
 test("can show the URL without opening a browser", function()
-  setup({ open_browser = false })
+  setup({ open = false })
   local path = tmp .. "/no-browser.md"
   open_buffer(path, "# No browser\n")
 
   check(preview.preview(), "preview should start")
   wait_for(function()
-    return notified_text():find("preview: http://localhost:6275", 1, true) ~= nil
+    return notified_text():find('preview "http://localhost:6275', 1, true) ~= nil
   end, "preview URL was not reported")
-  check(opened == nil, "browser_func must not run when open_browser is false")
+  check(opened == nil, "vim.ui.open must not run when open is false")
 end)
 
 test("reports a failing mo invocation and can retry", function()
@@ -364,12 +491,13 @@ test("reports invalid configuration without applying it", function()
   end
 
   expect_invalid({ cmd = "" }, "cmd")
+  expect_invalid({ target = 1 }, "target")
   expect_invalid({ port = 0 }, "port")
-  expect_invalid({ filetypes = "markdown" }, "filetypes")
-  expect_invalid({ open_browser = "yes" }, "open_browser")
+  expect_invalid({ open = "yes" }, "open")
 end)
 
 vim.notify = original_notify
+vim.ui.open = original_ui_open
 vim.fn.delete(tmp, "rf")
 
 print(string.format("%d tests, %d failures", total, failed))

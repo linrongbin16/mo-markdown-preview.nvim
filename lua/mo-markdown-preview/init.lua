@@ -5,26 +5,6 @@ local util = require("mo-markdown-preview.util")
 
 local M = {}
 
-local function supported(bufnr, force)
-	if force then
-		return true
-	end
-
-	local cfg = config.get()
-	if #cfg.filetypes == 0 then
-		return true
-	end
-
-	local filetype = vim.bo[bufnr].filetype
-	for _, candidate in ipairs(cfg.filetypes) do
-		if candidate == filetype then
-			return true
-		end
-	end
-
-	return false
-end
-
 --- Return the file on disk backing a buffer, or nil and an error message.
 ---@param bufnr integer
 ---@return string|nil path
@@ -44,7 +24,12 @@ end
 ---
 --- The buffer contents are intentionally not synchronized to mo: mo renders the
 --- file on disk and reloads it when Neovim saves the buffer.
----@param opts table|nil
+---
+--- Per-call options take precedence over the `setup()` configuration:
+--- `target` falls back to the configured target, `port` to the configured
+--- port, and `open = false` only reports the preview URL. A nil target uses
+--- the built-in per-file group.
+---@param opts table|nil May contain `bufnr`, `target`, `port`, and `open`.
 ---@return boolean started
 function M.preview(opts)
 	opts = opts or {}
@@ -55,17 +40,6 @@ function M.preview(opts)
 		return false
 	end
 
-	if not supported(bufnr, opts.force) then
-		util.notify(
-			string.format(
-				"filetype %s is not enabled for preview; use :MoPreview! or add it to `filetypes`",
-				vim.inspect(vim.bo[bufnr].filetype)
-			),
-			vim.log.levels.ERROR
-		)
-		return false
-	end
-
 	local path, path_err = buffer_file(bufnr)
 	if not path then
 		util.notify(path_err, vim.log.levels.ERROR)
@@ -73,6 +47,7 @@ function M.preview(opts)
 	end
 
 	local cfg = config.get()
+
 	local target = opts.target
 	if target ~= nil and type(target) ~= "string" then
 		util.notify("target must be a string or nil", vim.log.levels.ERROR)
@@ -82,7 +57,44 @@ function M.preview(opts)
 		target = nil
 	end
 
-	return cli.run(path, cfg, target, function(result)
+	local port = opts.port
+	if port ~= nil and (type(port) ~= "number" or port % 1 ~= 0 or port < 1 or port > 65535) then
+		util.notify("port must be an integer between 1 and 65535, or nil", vim.log.levels.ERROR)
+		return false
+	end
+
+	local open = opts.open
+	if open ~= nil and type(open) ~= "boolean" then
+		util.notify("open must be a boolean or nil", vim.log.levels.ERROR)
+		return false
+	end
+
+	local effective_port = cfg.port
+	if port ~= nil then
+		effective_port = port
+	end
+	local effective_open = cfg.open
+	if open ~= nil then
+		effective_open = open
+	end
+
+	local effective_target = target
+	if effective_target == nil then
+		effective_target = cfg.target
+	end
+	if effective_target == "" then
+		effective_target = nil
+	end
+
+	local call_cfg = cfg
+	if port ~= nil or open ~= nil then
+		call_cfg = vim.tbl_extend("force", cfg, {
+			port = effective_port,
+			open = effective_open,
+		})
+	end
+
+	return cli.run(path, call_cfg, effective_target, function(result)
 		if not result or result.code ~= 0 then
 			local code = result and result.code or -1
 			local output = "no error output"
@@ -115,7 +127,7 @@ function M.preview(opts)
 			return
 		end
 
-		local opened, open_err = opener.open(url, cfg)
+		local opened, open_err = opener.open(url, call_cfg)
 		if not opened then
 			util.notify(
 				string.format(
@@ -125,7 +137,7 @@ function M.preview(opts)
 				),
 				vim.log.levels.WARN
 			)
-		elseif not cfg.open_browser then
+		elseif not call_cfg.open then
 			util.notify(string.format("preview %s", vim.inspect(url)))
 		end
 	end)
