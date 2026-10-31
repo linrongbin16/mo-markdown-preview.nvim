@@ -150,7 +150,7 @@ preview.preview({ bufnr = 3, target = "api" })
 
 ## How it works
 
-1. Get the file name from the current buffer with `nvim_buf_get_name`.
+1. Get the file name from the current buffer.
 2. Check that the path exists and is readable. If not, report an error.
 3. Run
    `mo --no-open --json [--port PORT] --target GROUP <file>`. When no target is
