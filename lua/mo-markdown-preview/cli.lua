@@ -49,12 +49,13 @@ local function default_target(path)
   end))
 end
 
---- Build the `mo` command used to add a file to the preview server.
+--- Build a mo command with the shared port/target flags.
 ---@param path string
 ---@param cfg table
 ---@param target string|nil
+---@param flags string[]
 ---@return string[]
-function M.command(path, cfg, target)
+local function build_command(path, cfg, target, flags)
   local cmd = { cfg.cmd }
 
   if cfg.port then
@@ -66,9 +67,27 @@ function M.command(path, cfg, target)
     group = default_target(path)
   end
   vim.list_extend(cmd, { "--target", group })
-
-  vim.list_extend(cmd, { "--no-open", "--json", path })
+  vim.list_extend(cmd, flags)
+  vim.list_extend(cmd, { path })
   return cmd
+end
+
+--- Build the `mo` command used to add a file to the preview server.
+---@param path string
+---@param cfg table
+---@param target string|nil
+---@return string[]
+function M.command(path, cfg, target)
+  return build_command(path, cfg, target, { "--no-open", "--json" })
+end
+
+--- Build the `mo` command used to close a file.
+---@param path string
+---@param cfg table
+---@param target string|nil
+---@return string[]
+function M.close_command(path, cfg, target)
+  return build_command(path, cfg, target, { "--close" })
 end
 
 --- Decode the JSON document emitted by `mo --json`.
@@ -123,13 +142,12 @@ function M.find_url(data, path)
   return nil
 end
 
---- Run mo to add a file and return its preview URL through `callback`.
----@param path string
+--- Run a prepared mo command and return its result through `callback`.
+---@param cmd string[]
 ---@param cfg table
----@param target string|nil
 ---@param callback fun(result: table)
 ---@return boolean started
-function M.run(path, cfg, target, callback)
+local function start(cmd, cfg, callback)
   local exe, err = executable(cfg)
   if not exe then
     vim.schedule(function()
@@ -142,7 +160,6 @@ function M.run(path, cfg, target, callback)
     return false
   end
 
-  local cmd = M.command(path, cfg, target)
   cmd[1] = exe
 
   local ok, proc = pcall(vim.system, cmd, {
@@ -166,6 +183,26 @@ function M.run(path, cfg, target, callback)
   end
 
   return ok
+end
+
+--- Run mo to add a file and return its preview URL through `callback`.
+---@param path string
+---@param cfg table
+---@param target string|nil
+---@param callback fun(result: table)
+---@return boolean started
+function M.run(path, cfg, target, callback)
+  return start(M.command(path, cfg, target), cfg, callback)
+end
+
+--- Run mo to close a file and report the result through `callback`.
+---@param path string
+---@param cfg table
+---@param target string|nil
+---@param callback fun(result: table)
+---@return boolean started
+function M.close(path, cfg, target, callback)
+  return start(M.close_command(path, cfg, target), cfg, callback)
 end
 
 return M

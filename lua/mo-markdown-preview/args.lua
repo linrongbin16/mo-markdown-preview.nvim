@@ -42,7 +42,7 @@ local function tokenize(input)
 	return tokens
 end
 
---- Parse the arguments accepted by :MoPreview.
+--- Parse the arguments accepted by :MoOpen and :MoClose.
 ---
 --- Supported flags:
 ---   --target TARGET   mo group name for this call
@@ -51,11 +51,16 @@ end
 ---   --open            open a browser even when `open = false`
 ---
 --- `--flag=value` is accepted as well. `--no-open` and `--open` override each
---- other, so the last one wins.
+--- other, so the last one wins. They can be disabled with
+--- `parse_opts.allow_open = false`.
 ---@param input string
+---@param parse_opts { allow_open?: boolean }|nil
 ---@return table|nil opts
 ---@return string|nil err
-function M.parse(input)
+function M.parse(input, parse_opts)
+	parse_opts = parse_opts or {}
+	local allow_open = parse_opts.allow_open ~= false
+
 	local tokens, token_err = tokenize(input or "")
 	if not tokens then
 		return nil, token_err
@@ -103,11 +108,17 @@ function M.parse(input)
 			end
 			opts.port = port
 		elseif name == "--no-open" then
+			if not allow_open then
+				return nil, "--no-open is not supported by this command"
+			end
 			if inline ~= nil then
 				return nil, "--no-open does not take a value"
 			end
 			opts.open = false
 		elseif name == "--open" then
+			if not allow_open then
+				return nil, "--open is not supported by this command"
+			end
 			if inline ~= nil then
 				return nil, "--open does not take a value"
 			end

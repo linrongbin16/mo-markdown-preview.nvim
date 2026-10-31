@@ -12,7 +12,7 @@ local M = {}
 local function buffer_file(bufnr)
 	local name = vim.api.nvim_buf_get_name(bufnr)
 	if name == "" then
-		return nil, "current buffer has no file name; save it to a file before previewing"
+		return nil, "current buffer has no file name; save it to a file first"
 	end
 	if vim.fn.filereadable(name) ~= 1 then
 		return nil, string.format("current buffer is not backed by a readable file: %s", name)
@@ -20,30 +20,42 @@ local function buffer_file(bufnr)
 	return vim.fn.fnamemodify(name, ":p")
 end
 
---- Preview the file backing the current buffer with mo.
----
---- The buffer contents are intentionally not synchronized to mo: mo renders the
---- file on disk and reloads it when Neovim saves the buffer.
----
---- Per-call options take precedence over the `setup()` configuration:
---- `target` falls back to the configured target, `port` to the configured
---- port, and `open = false` only reports the preview URL. A nil target uses
---- the built-in per-file group.
----@param opts table|nil May contain `bufnr`, `target`, `port`, and `open`.
----@return boolean started
-function M.preview(opts)
-	opts = opts or {}
+--- Report a failing mo invocation.
+---@param result table|nil
+local function report_failure(result)
+	local code = result and result.code or -1
+	local output = "no error output"
+	if result then
+		if type(result.stderr) == "string" and result.stderr ~= "" then
+			output = result.stderr
+		elseif type(result.stdout) == "string" and result.stdout ~= "" then
+			output = result.stdout
+		end
+	end
+	util.notify(string.format("mo exited with code %s: %s", vim.inspect(code), util.trim(output)), vim.log.levels.ERROR)
+end
+
+---@class mo.markdown.preview.Context
+---@field path string
+---@field target string|nil
+---@field call_cfg table
+
+--- Resolve the file, target, and per-call configuration for a command.
+---@param opts table
+---@param allow_open boolean
+---@return mo.markdown.preview.Context|nil
+local function resolve(opts, allow_open)
 	local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
 
 	if not vim.api.nvim_buf_is_valid(bufnr) then
 		util.notify(string.format("invalid buffer %s", vim.inspect(bufnr)), vim.log.levels.ERROR)
-		return false
+		return nil
 	end
 
 	local path, path_err = buffer_file(bufnr)
 	if not path then
 		util.notify(path_err, vim.log.levels.ERROR)
-		return false
+		return nil
 	end
 
 	local cfg = config.get()
@@ -51,7 +63,7 @@ function M.preview(opts)
 	local target = opts.target
 	if target ~= nil and type(target) ~= "string" then
 		util.notify("target must be a string or nil", vim.log.levels.ERROR)
-		return false
+		return nil
 	end
 	if target == "" then
 		target = nil
@@ -60,22 +72,17 @@ function M.preview(opts)
 	local port = opts.port
 	if port ~= nil and (type(port) ~= "number" or port % 1 ~= 0 or port < 1 or port > 65535) then
 		util.notify("port must be an integer between 1 and 65535, or nil", vim.log.levels.ERROR)
-		return false
+		return nil
 	end
 
 	local open = opts.open
 	if open ~= nil and type(open) ~= "boolean" then
 		util.notify("open must be a boolean or nil", vim.log.levels.ERROR)
-		return false
+		return nil
 	end
-
-	local effective_port = cfg.port
-	if port ~= nil then
-		effective_port = port
-	end
-	local effective_open = cfg.open
-	if open ~= nil then
-		effective_open = open
+	if not allow_open and open ~= nil then
+		util.notify("open is not supported by close()", vim.log.levels.ERROR)
+		return nil
 	end
 
 	local effective_target = target
@@ -87,28 +94,45 @@ function M.preview(opts)
 	end
 
 	local call_cfg = cfg
-	if port ~= nil or open ~= nil then
-		call_cfg = vim.tbl_extend("force", cfg, {
-			port = effective_port,
-			open = effective_open,
-		})
+	local overrides = nil
+	if port ~= nil then
+		overrides = { port = port }
+	end
+	if allow_open and open ~= nil then
+		overrides = overrides or {}
+		overrides.open = open
+	end
+	if overrides then
+		call_cfg = vim.tbl_extend("force", cfg, overrides)
 	end
 
-	return cli.run(path, call_cfg, effective_target, function(result)
+	return {
+		path = path,
+		target = effective_target,
+		call_cfg = call_cfg,
+	}
+end
+
+--- Open the file backing the current buffer in mo.
+---
+--- The buffer contents are intentionally not synchronized to mo: mo renders the
+--- file on disk and reloads it when Neovim saves the buffer.
+---
+--- Per-call options take precedence over the `setup()` configuration:
+--- `target` falls back to the configured target, `port` to the configured
+--- port, and `open = false` only reports the preview URL. A nil target uses
+--- the built-in per-file group.
+---@param opts table|nil May contain `bufnr`, `target`, `port`, and `open`.
+---@return boolean started
+function M.open(opts)
+	local ctx = resolve(opts or {}, true)
+	if not ctx then
+		return false
+	end
+
+	return cli.run(ctx.path, ctx.call_cfg, ctx.target, function(result)
 		if not result or result.code ~= 0 then
-			local code = result and result.code or -1
-			local output = "no error output"
-			if result then
-				if type(result.stderr) == "string" and result.stderr ~= "" then
-					output = result.stderr
-				elseif type(result.stdout) == "string" and result.stdout ~= "" then
-					output = result.stdout
-				end
-			end
-			util.notify(
-				string.format("mo exited with code %s: %s", vim.inspect(code), util.trim(output)),
-				vim.log.levels.ERROR
-			)
+			report_failure(result)
 			return
 		end
 
@@ -118,16 +142,16 @@ function M.preview(opts)
 			return
 		end
 
-		local url = cli.find_url(data, path)
+		local url = cli.find_url(data, ctx.path)
 		if not url then
 			util.notify(
-				string.format("mo did not return a preview URL for %s", vim.inspect(path)),
+				string.format("mo did not return a preview URL for %s", vim.inspect(ctx.path)),
 				vim.log.levels.ERROR
 			)
 			return
 		end
 
-		local opened, open_err = opener.open(url, call_cfg)
+		local opened, open_err = opener.open(url, ctx.call_cfg)
 		if not opened then
 			util.notify(
 				string.format(
@@ -137,9 +161,32 @@ function M.preview(opts)
 				),
 				vim.log.levels.WARN
 			)
-		elseif not call_cfg.open then
+		elseif not ctx.call_cfg.open then
 			util.notify(string.format("preview %s", vim.inspect(url)))
 		end
+	end)
+end
+
+--- Close the file backing the current buffer in mo.
+---
+--- The target and port must match the ones used to open the file. Per-call
+--- options take precedence over the `setup()` configuration: `target` falls
+--- back to the configured target and `port` to the configured port.
+---@param opts table|nil May contain `bufnr`, `target`, and `port`.
+---@return boolean started
+function M.close(opts)
+	local ctx = resolve(opts or {}, false)
+	if not ctx then
+		return false
+	end
+
+	return cli.close(ctx.path, ctx.call_cfg, ctx.target, function(result)
+		if not result or result.code ~= 0 then
+			report_failure(result)
+			return
+		end
+
+		util.notify(string.format("closed %s", vim.inspect(ctx.path)))
 	end)
 end
 
