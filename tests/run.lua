@@ -172,12 +172,13 @@ local function test(name, fn)
   end
 end
 
-test("registers the :MoOpen and :MoClose commands", function()
-  eq(vim.fn.exists(":MoOpen"), 2)
-  eq(vim.fn.exists(":MoClose"), 2)
+test("registers :MoPreview without :MoOpen or :MoClose", function()
+  eq(vim.fn.exists(":MoPreview"), 2)
+  eq(vim.fn.exists(":MoOpen"), 0)
+  eq(vim.fn.exists(":MoClose"), 0)
 end)
 
-test("parses --target, --port, --no-open, and --open", function()
+test("parses --target, --port, --close, --no-open, and --open", function()
   local args = require("mo-markdown-preview.args")
 
   local parsed, err = args.parse("")
@@ -198,18 +199,23 @@ test("parses --target, --port, --no-open, and --open", function()
   eq(assert(args.parse("--open")).open, true)
   eq(assert(args.parse("--no-open --open")).open, true)
   eq(assert(args.parse("--open --no-open")).open, false)
+  eq(assert(args.parse("--close")).close, true)
 
-  local close_args = assert(args.parse("--target docs --port 6276", { allow_open = false }))
+  for _, combined in ipairs({
+    "--close --open",
+    "--open --close",
+    "--close --no-open",
+    "--no-open --close",
+  }) do
+    local value, conflict_err = args.parse(combined)
+    eq(value, nil, "should reject: " .. combined)
+    contains(conflict_err, "cannot be combined")
+  end
+
+  local close_args = assert(args.parse("--target docs --port 6276 --close"))
   eq(close_args.target, "docs")
   eq(close_args.port, 6276)
-
-  local close_value, close_err = args.parse("--no-open", { allow_open = false })
-  eq(close_value, nil)
-  contains(close_err, "not supported")
-
-  close_value, close_err = args.parse("--open", { allow_open = false })
-  eq(close_value, nil)
-  contains(close_err, "not supported")
+  eq(close_args.close, true)
 
   local cases = {
     { "--target", "--target" },
@@ -219,6 +225,7 @@ test("parses --target, --port, --no-open, and --open", function()
     { "--port 65536", "invalid --port" },
     { "--no-open=1", "--no-open" },
     { "--open=1", "--open" },
+    { "--close=1", "--close" },
     { "--bogus", "unknown option" },
     { "docs", "use --target" },
     { [[--target "unterminated]], "unterminated quote" },
@@ -234,7 +241,7 @@ test("passes the current file to mo", function()
   local path = tmp .. "/README.md"
   open_buffer(path, "# Hello\n")
 
-  vim.cmd("MoOpen")
+  vim.cmd("MoPreview")
   wait_for(function()
     return opened ~= nil
   end, "browser was not opened")
@@ -255,7 +262,7 @@ test("accepts an explicit target argument", function()
   local path = tmp .. "/grouped.md"
   open_buffer(path, "# Grouped\n")
 
-  vim.cmd("MoOpen --target docs")
+  vim.cmd("MoPreview --target docs")
   wait_for(function()
     return opened ~= nil
   end, "browser was not opened")
@@ -270,7 +277,7 @@ test("applies --port and --no-open to one call", function()
   local path = tmp .. "/flags.md"
   open_buffer(path, "# Flags\n")
 
-  vim.cmd("MoOpen --port 6200 --no-open")
+  vim.cmd("MoPreview --port 6200 --no-open")
   wait_for(function()
     return notified_text():find("http://localhost:6275", 1, true) ~= nil
   end, "preview URL was not reported")
@@ -287,7 +294,7 @@ test("uses the configured target when --target is omitted", function()
   local path = tmp .. "/configured-target.md"
   open_buffer(path, "# Configured target\n")
 
-  vim.cmd("MoOpen")
+  vim.cmd("MoPreview")
   wait_for(function()
     return opened ~= nil
   end, "browser was not opened")
@@ -304,7 +311,7 @@ test("--target overrides the configured target", function()
   local path = tmp .. "/target-override.md"
   open_buffer(path, "# Target override\n")
 
-  vim.cmd("MoOpen --target docs")
+  vim.cmd("MoPreview --target docs")
   wait_for(function()
     return opened ~= nil
   end, "browser was not opened")
@@ -317,7 +324,7 @@ test("accepts a quoted target value", function()
   local path = tmp .. "/quoted.md"
   open_buffer(path, "# Quoted\n")
 
-  vim.cmd([[MoOpen --target="my group" --no-open]])
+  vim.cmd([[MoPreview --target="my group" --no-open]])
   wait_for(function()
     return notified_text():find("http://localhost:6275", 1, true) ~= nil
   end, "preview URL was not reported")
@@ -330,7 +337,7 @@ test("--open overrides open = false", function()
   local path = tmp .. "/force-open.md"
   open_buffer(path, "# Force open\n")
 
-  vim.cmd("MoOpen --open")
+  vim.cmd("MoPreview --open")
   wait_for(function()
     return opened ~= nil
   end, "browser was not opened")
@@ -338,11 +345,11 @@ test("--open overrides open = false", function()
   eq(config.get().open, false, "--open must not change the configuration")
 end)
 
-test("closes the current file with mo --close", function()
+test("closes the current file with MoPreview --close", function()
   local path = tmp .. "/closable.md"
   open_buffer(path, "# Closable\n")
 
-  vim.cmd("MoClose")
+  vim.cmd("MoPreview --close")
   wait_for(function()
     return notified_text():find("closed", 1, true) ~= nil
   end, "close was not reported")
@@ -355,11 +362,11 @@ test("closes the current file with mo --close", function()
   eq(opened, nil, "close must not open a browser")
 end)
 
-test("applies --target and --port to MoClose", function()
+test("applies --target and --port to MoPreview --close", function()
   local path = tmp .. "/close-flags.md"
   open_buffer(path, "# Close flags\n")
 
-  vim.cmd("MoClose --target docs --port 6200")
+  vim.cmd("MoPreview --close --target docs --port 6200")
   wait_for(function()
     return notified_text():find("closed", 1, true) ~= nil
   end, "close was not reported")
@@ -369,12 +376,12 @@ test("applies --target and --port to MoClose", function()
   eq(config.get().port, 6123, "--port must not change the configuration")
 end)
 
-test("uses the configured target and port for MoClose", function()
+test("uses the configured target and port for MoPreview --close", function()
   setup({ target = "shared", port = 6201 })
   local path = tmp .. "/close-configured.md"
   open_buffer(path, "# Close configured\n")
 
-  vim.cmd("MoClose")
+  vim.cmd("MoPreview --close")
   wait_for(function()
     return notified_text():find("closed", 1, true) ~= nil
   end, "close was not reported")
@@ -383,26 +390,30 @@ test("uses the configured target and port for MoClose", function()
   check(has_arg("6201"), "configured port should be passed to mo")
 end)
 
-test("rejects open flags for MoClose", function()
+test("rejects --close combined with --open or --no-open", function()
   local path = tmp .. "/bad-close.md"
   open_buffer(path, "# Bad close\n")
 
-  vim.cmd("MoClose --open")
-  contains(notified_text(), "not supported")
+  for _, command in ipairs({
+    "MoPreview --close --open",
+    "MoPreview --open --close",
+    "MoPreview --close --no-open",
+    "MoPreview --no-open --close",
+  }) do
+    notified = {}
+    vim.cmd(command)
+    contains(notified_text(), "cannot be combined", "should reject: " .. command)
+  end
 
-  notified = {}
-  vim.cmd("MoClose --no-open")
-  contains(notified_text(), "not supported")
-
-  eq(log_text(), "", "mo must not run for rejected close flags")
+  eq(log_text(), "", "mo must not run for conflicting flags")
 end)
 
-test("reports a failing MoClose", function()
+test("reports a failing MoPreview --close", function()
   local path = tmp .. "/close-failure.md"
   open_buffer(path, "# Close failure\n")
 
   vim.env.MO_FAKE_FAIL = "1"
-  vim.cmd("MoClose")
+  vim.cmd("MoPreview --close")
   wait_for(function()
     return notified_text():find("fake mo failure", 1, true) ~= nil
   end, "mo's close error was not reported")
@@ -413,15 +424,15 @@ test("rejects invalid command arguments before running mo", function()
   local path = tmp .. "/bad-args.md"
   open_buffer(path, "# Bad args\n")
 
-  vim.cmd("MoOpen --port nope")
+  vim.cmd("MoPreview --port nope")
   contains(notified_text(), "invalid --port")
 
   notified = {}
-  vim.cmd("MoOpen --unknown")
+  vim.cmd("MoPreview --unknown")
   contains(notified_text(), "unknown option")
 
   notified = {}
-  vim.cmd("MoOpen docs")
+  vim.cmd("MoPreview docs")
   contains(notified_text(), "use --target")
 
   eq(log_text(), "", "mo must not run for invalid arguments")

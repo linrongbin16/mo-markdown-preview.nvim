@@ -130,7 +130,7 @@ function M.open(opts)
 		return false
 	end
 
-	return cli.run(ctx.path, ctx.call_cfg, ctx.target, function(result)
+	return cli.run(ctx.path, ctx.call_cfg, ctx.target, false, function(result)
 		if not result or result.code ~= 0 then
 			report_failure(result)
 			return
@@ -180,7 +180,7 @@ function M.close(opts)
 		return false
 	end
 
-	return cli.close(ctx.path, ctx.call_cfg, ctx.target, function(result)
+	return cli.run(ctx.path, ctx.call_cfg, ctx.target, true, function(result)
 		if not result or result.code ~= 0 then
 			report_failure(result)
 			return

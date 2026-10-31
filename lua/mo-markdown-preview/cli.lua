@@ -72,22 +72,16 @@ local function build_command(path, cfg, target, flags)
   return cmd
 end
 
---- Build the `mo` command used to add a file to the preview server.
+--- Build the `mo` command used to add a file to the preview server, or to
+--- close it again.
 ---@param path string
 ---@param cfg table
 ---@param target string|nil
+---@param close boolean|nil When true, build the `mo --close` command instead.
 ---@return string[]
-function M.command(path, cfg, target)
-  return build_command(path, cfg, target, { "--no-open", "--json" })
-end
-
---- Build the `mo` command used to close a file.
----@param path string
----@param cfg table
----@param target string|nil
----@return string[]
-function M.close_command(path, cfg, target)
-  return build_command(path, cfg, target, { "--close" })
+function M.command(path, cfg, target, close)
+  local flags = close and { "--close" } or { "--no-open", "--json" }
+  return build_command(path, cfg, target, flags)
 end
 
 --- Decode the JSON document emitted by `mo --json`.
@@ -185,24 +179,16 @@ local function start(cmd, cfg, callback)
   return ok
 end
 
---- Run mo to add a file and return its preview URL through `callback`.
+--- Run mo to add a file to the preview server, or to close it again, and
+--- report the result through `callback`.
 ---@param path string
 ---@param cfg table
 ---@param target string|nil
+---@param close boolean|nil When true, run `mo --close`.
 ---@param callback fun(result: table)
 ---@return boolean started
-function M.run(path, cfg, target, callback)
-  return start(M.command(path, cfg, target), cfg, callback)
-end
-
---- Run mo to close a file and report the result through `callback`.
----@param path string
----@param cfg table
----@param target string|nil
----@param callback fun(result: table)
----@return boolean started
-function M.close(path, cfg, target, callback)
-  return start(M.close_command(path, cfg, target), cfg, callback)
+function M.run(path, cfg, target, close, callback)
+  return start(M.command(path, cfg, target, close), cfg, callback)
 end
 
 return M

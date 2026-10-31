@@ -1,5 +1,7 @@
 local M = {}
 
+local close_conflict = "--close conflicts with --open and --no-open; these flags cannot be combined"
+
 --- Split a command line into tokens, honoring single and double quotes.
 ---
 --- Quotes may appear in the middle of a token, so `--target="my group"` is one
@@ -42,17 +44,18 @@ local function tokenize(input)
 	return tokens
 end
 
---- Parse the arguments accepted by :MoOpen and :MoClose.
+--- Parse the arguments accepted by :MoPreview.
 ---
 --- Supported flags:
 ---   --target TARGET   mo group name for this call
 ---   --port PORT       mo server port for this call
+---   --close           close the file instead of opening it
 ---   --no-open         do not open a browser; only report the URL
 ---   --open            open a browser even when `open = false`
 ---
 --- `--flag=value` is accepted as well. `--no-open` and `--open` override each
 --- other, so the last one wins. They can be disabled with
---- `parse_opts.allow_open = false`.
+--- `parse_opts.allow_open = false`. `--close` conflicts with `--open`/`--no-open`.
 ---@param input string
 ---@param parse_opts { allow_open?: boolean }|nil
 ---@return table|nil opts
@@ -107,12 +110,23 @@ function M.parse(input, parse_opts)
 					)
 			end
 			opts.port = port
+		elseif name == "--close" then
+			if inline ~= nil then
+				return nil, "--close does not take a value"
+			end
+			if opts.open ~= nil then
+				return nil, close_conflict
+			end
+			opts.close = true
 		elseif name == "--no-open" then
 			if not allow_open then
 				return nil, "--no-open is not supported by this command"
 			end
 			if inline ~= nil then
 				return nil, "--no-open does not take a value"
+			end
+			if opts.close then
+				return nil, close_conflict
 			end
 			opts.open = false
 		elseif name == "--open" then
@@ -121,6 +135,9 @@ function M.parse(input, parse_opts)
 			end
 			if inline ~= nil then
 				return nil, "--open does not take a value"
+			end
+			if opts.close then
+				return nil, close_conflict
 			end
 			opts.open = true
 		elseif token:sub(1, 1) == "-" then

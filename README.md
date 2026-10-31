@@ -10,14 +10,14 @@ contents to a temporary file or sync unsaved changes to `mo`.
 
 ## Features
 
-- `:MoOpen` command to open the current buffer's file in `mo`.
-- `:MoClose` command to close the file again from the same group.
+- `:MoPreview` command to open the current buffer's file in `mo`.
+- `:MoPreview --close` to close the file again from the same group.
 - No filetype check: the buffer only needs a readable file on disk.
 - Uses the real file on disk, so `mo`'s native live-reload works on save.
 - Opens the exact file's deeplink, not just the `mo` server root.
 - Supports `mo` groups and custom ports.
 - Per-call flags `--target`, `--port`, and `--no-open`/`--open` override the
-  configured target, port, and open.
+  configured target, port, and open; `--close` switches the command to closing.
 - Puts each file in its own `mo` group named after its URI-encoded full path;
   pass `--target` to share a group explicitly.
 
@@ -34,7 +34,7 @@ contents to a temporary file or sync unsaved changes to `mo`.
 ```lua
 {
   "linrongbin16/mo-markdown-preview.nvim",
-  cmd = { "MoOpen", "MoClose" },
+  cmd = { "MoPreview" },
   opts = {},
 }
 ```
@@ -68,10 +68,10 @@ git clone https://github.com/linrongbin16/mo-markdown-preview.nvim \
 Open a file and run:
 
 ```vim
-:MoOpen
+:MoPreview
 ```
 
-The default browser opens on that file in `mo`. Running `:MoOpen` again adds
+The default browser opens on that file in `mo`. Running `:MoPreview` again adds
 the same file to its group (deduplicated by absolute path) and opens its URL
 again.
 
@@ -89,54 +89,55 @@ the plugin configuration (`config.lua` defaults, optionally overridden by
 Pass `--target` to choose a group yourself:
 
 ```vim
-:MoOpen --target docs
-:MoOpen --target default
+:MoPreview --target docs
+:MoPreview --target default
 ```
 
 Use `--port` to talk to a `mo` server on a specific port for this call. It
 overrides `port` from `setup()`:
 
 ```vim
-:MoOpen --port 6276
+:MoPreview --port 6276
 ```
 
 Use `--no-open` to only report the preview URL without opening a browser:
 
 ```vim
-:MoOpen --no-open
+:MoPreview --no-open
 ```
 
 Use `--open` to force opening a browser for this call, even when
 `open = false` is configured:
 
 ```vim
-:MoOpen --open
+:MoPreview --open
 ```
 
 `--no-open` and `--open` override each other, so the last one wins.
 
-The flags can be combined, and `--flag=value` is accepted as well. Quote values
-that contain spaces:
+The target and port flags can be combined with one of the mode flags, and
+`--flag=value` is accepted as well. Quote values that contain spaces:
 
 ```vim
-:MoOpen --target docs --port 6276 --no-open
-:MoOpen --target="my group"
+:MoPreview --target docs --port 6276 --no-open
+:MoPreview --target="my group"
 ```
 
-Close the file again with:
+Close the file again with `--close`:
 
 ```vim
-:MoClose
-:MoClose --target docs
-:MoClose --port 6276
+:MoPreview --close
+:MoPreview --close --target docs
+:MoPreview --close --port 6276
 ```
 
-`:MoClose` runs `mo --close` with the same target and port resolution as
-`:MoOpen`, so the defaults match. If you opened with `--target` or `--port`,
-pass the same flags (or configure them) to close the file. `--open` and
-`--no-open` are only accepted by `:MoOpen`; they do not apply to closing.
+`--close` runs `mo --close` with the same target and port resolution as
+opening, so the defaults match. If you opened with `--target` or `--port`,
+pass the same flags (or configure them) to close the file. The open flags only
+apply when adding a file to `mo`, so `--close` conflicts with `--open` and
+`--no-open`; combining them is an error.
 
-Both commands require the buffer to be backed by a readable file. If it is not,
+The command requires the buffer to be backed by a readable file. If it is not,
 the plugin reports an error and does not call `mo`:
 
 ```text
@@ -176,9 +177,9 @@ require("mo-markdown-preview").setup({
 | `port`   | `nil`   | `mo --port`. `nil` means `mo`'s default (`6275`). `--port` overrides it. |
 | `open`   | `true`  | Open the URL in the default browser. Set `false` to only show the URL.   |
 
-Command flags override these options for a single call: `:MoOpen` accepts
-`--target`, `--port`, `--no-open`, and `--open`; `:MoClose` accepts `--target`
-and `--port`.
+Command flags override these options for a single call: `:MoPreview` accepts
+`--target`, `--port`, `--close`, `--no-open`, and `--open`. `--close` conflicts
+with `--open`/`--no-open`.
 
 The Lua API is also available:
 
@@ -211,8 +212,9 @@ mo.close({ port = 6276 })      -- close on another port
    `vim.ui.open`. With `--no-open` (or `open = false`) the URL is only reported;
    `--open` forces the browser open.
 
-`:MoClose` runs `mo --close [--port PORT] --target GROUP <file>` with the same
-target and port resolution, then reports success or the error from `mo`.
+`:MoPreview --close` runs `mo --close [--port PORT] --target GROUP <file>` with
+the same target and port resolution, then reports success or the error from
+`mo`.
 
 No file is written, no buffer contents are copied, and no autocmds are
 installed. `mo` reads the file from disk and handles reloading when Neovim saves
