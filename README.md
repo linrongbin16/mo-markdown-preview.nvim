@@ -17,8 +17,8 @@ contents to a temporary file or sync unsaved changes to `mo`.
 - Supports `mo` groups and custom ports.
 - Per-call flags `--target`, `--port`, and `--no-open`/`--open` override the
   configured target, port, and open.
-- Puts each file in its own `mo` group by default; pass `--target` to share a
-  group explicitly.
+- Puts each file in its own `mo` group named after its full path by default;
+  pass `--target` to share a group explicitly.
 
 ## Requirements
 
@@ -74,19 +74,13 @@ The default browser opens on that file in `mo`. Running `:MoPreview` again adds
 the same file to its group (deduplicated by absolute path) and opens its URL
 again.
 
-By default each file gets its own group named
-`<display>-<sha256(abs_path)[1:8]>`, so opening several Markdown files does not
-mix them in one `mo` sidebar. `<display>` is:
-
-- relative to the current working directory when the file is under it, for
-  example `docs/README.md`;
-- prefixed with `~/` when the file is under the home directory but outside the
-  working directory, for example `~/.config/test.md`;
-- the full absolute path otherwise, for example `/etc/environment`.
+By default each file gets its own group named after its full path (with forward
+slashes on Windows), so opening several files does not mix them in one `mo`
+sidebar.
 
 All flags are optional. With no flags, `target`, `port`, and `open` come from
 the plugin configuration (`config.lua` defaults, optionally overridden by
-`setup()`); a nil `target` uses the default per-file group above.
+`setup()`); a nil `target` uses the file's full path.
 
 Pass `--target` to choose a group yourself:
 
@@ -144,7 +138,7 @@ require("mo-markdown-preview").setup({
   -- Command used to run mo: name on $PATH or absolute path.
   cmd = "mo",
 
-  -- Default mo group. nil uses the built-in per-file group.
+  -- Default mo group. nil uses the file's full path.
   -- Overridden by --target for one call.
   target = nil,
 
@@ -161,7 +155,7 @@ require("mo-markdown-preview").setup({
 | Option   | Default | Description                                                              |
 | -------- | ------- | ------------------------------------------------------------------------ |
 | `cmd`    | `"mo"`  | Command used to run mo: name or absolute path.                           |
-| `target` | `nil`   | Default mo group. `nil` uses the built-in per-file group.                |
+| `target` | `nil`   | Default mo group. `nil` uses the file's full path.                       |
 | `port`   | `nil`   | `mo --port`. `nil` means `mo`'s default (`6275`). `--port` overrides it. |
 | `open`   | `true`  | Open the URL in the default browser. Set `false` to only show the URL.   |
 
@@ -189,9 +183,8 @@ preview.preview({ target = "docs", port = 6276, open = false })
 3. Run
    `mo --no-open --json [--port PORT] --target GROUP <file>`. `PORT` comes from
    `--port`, then the `port` option. `GROUP` comes from `--target`, then the
-   `target` option; when both are nil, `GROUP` is
-   `<display>-<sha256(abs_path)[1:8]>`, using the cwd/home/absolute-path display
-   rules above.
+   `target` option; when both are nil, `GROUP` is the file's full path (with
+   forward slashes on Windows).
 4. Parse `mo`'s JSON output, find the deeplink for `<file>`, and open it with
    `vim.ui.open`. With `--no-open` (or `open = false`) the URL is only reported;
    `--open` forces the browser open.
@@ -206,6 +199,10 @@ across invocations. Use `mo --shutdown` to stop it.
 
 ## Notes and limitations
 
+- The default group is the file's full path. `mo` rejects `?`, `#`, `\`, and
+  control characters in group names, and paths with spaces or non-ASCII
+  characters may not select the right group; pass an explicit `--target` for
+  such files.
 - Unsaved changes are not previewed. Save the file and let `mo` reload it.
 - Buffers without a file on disk (unnamed buffers, `oil://`, terminal buffers,
   and so on) are rejected with an error message.

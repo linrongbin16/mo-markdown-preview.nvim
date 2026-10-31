@@ -104,6 +104,10 @@ local function target_arg(cmd)
   return nil
 end
 
+local function logged_target()
+  return target_arg(log_args())
+end
+
 local function wait_for(predicate, message)
   if not vim.wait(5000, predicate, 20) then
     error(message or "timed out", 2)
@@ -231,7 +235,7 @@ test("passes the current file to mo", function()
   check(has_arg("--target"))
   local expected_target = target_arg(cli.command(path, config.get(), nil))
   check(expected_target ~= nil, "default target should be present")
-  check(has_arg(expected_target))
+  eq(logged_target(), expected_target)
 end)
 
 test("accepts an explicit target argument", function()
@@ -243,11 +247,10 @@ test("accepts an explicit target argument", function()
     return opened ~= nil
   end, "browser was not opened")
 
-  check(has_arg("--target"))
-  check(has_arg("docs"))
+  eq(logged_target(), "docs")
   local default_target = target_arg(cli.command(path, config.get(), nil))
   check(default_target ~= nil, "default target should be present")
-  check(not has_arg(default_target))
+  check(default_target ~= "docs", "default target should differ from the explicit target")
 end)
 
 test("applies --port and --no-open to one call", function()
@@ -277,10 +280,10 @@ test("uses the configured target when --target is omitted", function()
   end, "browser was not opened")
 
   eq(config.get().target, "shared")
-  check(has_arg("shared"), "configured target should be passed to mo")
+  eq(logged_target(), "shared", "configured target should be passed to mo")
   local default_target = target_arg(cli.command(path, config.get(), nil))
   check(default_target ~= nil, "default target should be present")
-  check(not has_arg(default_target), "built-in target must not be used")
+  check(default_target ~= "shared", "built-in target should differ from the configured target")
 end)
 
 test("--target overrides the configured target", function()
@@ -293,8 +296,8 @@ test("--target overrides the configured target", function()
     return opened ~= nil
   end, "browser was not opened")
 
-  check(has_arg("docs"), "--target should override the configured target")
-  check(not has_arg("shared"), "configured target must not be passed")
+  eq(logged_target(), "docs", "--target should override the configured target")
+  eq(config.get().target, "shared")
 end)
 
 test("accepts a quoted target value", function()
@@ -340,33 +343,20 @@ test("rejects invalid command arguments before running mo", function()
   eq(log_text(), "", "mo must not run for invalid arguments")
 end)
 
-test("derives target names from cwd, home, and absolute paths", function()
+test("uses the full file path as the default target", function()
   local cfg = config.get()
   local cwd = vim.fs.normalize(vim.fn.getcwd())
   local home = vim.fs.normalize(vim.fn.expand("~"))
   local outside = vim.fn.has("win32") == 1 and "C:/mo-preview-outside.md" or "/mo-preview-outside.md"
 
-  local function expected(path, display)
-    local absolute = vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
-    return display .. "-" .. vim.fn.sha256(absolute):sub(1, 8)
+  local function expected(path)
+    return vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
   end
 
-  eq(
-    target_arg(cli.command(cwd .. "/README.md", cfg, nil)),
-    expected(cwd .. "/README.md", "README.md")
-  )
-  eq(
-    target_arg(cli.command(cwd .. "/docs/README.md", cfg, nil)),
-    expected(cwd .. "/docs/README.md", "docs/README.md")
-  )
-  eq(
-    target_arg(cli.command(home .. "/.config/test.md", cfg, nil)),
-    expected(home .. "/.config/test.md", "~/.config/test.md")
-  )
-  eq(
-    target_arg(cli.command(outside, cfg, nil)),
-    expected(outside, vim.fs.normalize(vim.fn.fnamemodify(outside, ":p")))
-  )
+  eq(target_arg(cli.command(cwd .. "/README.md", cfg, nil)), expected(cwd .. "/README.md"))
+  eq(target_arg(cli.command(cwd .. "/docs/README.md", cfg, nil)), expected(cwd .. "/docs/README.md"))
+  eq(target_arg(cli.command(home .. "/.config/test.md", cfg, nil)), expected(home .. "/.config/test.md"))
+  eq(target_arg(cli.command(outside, cfg, nil)), expected(outside))
 end)
 
 test("does not sync modified buffer contents", function()

@@ -33,61 +33,14 @@ local function normalize_path(path)
   return normalized
 end
 
-local function with_trailing_slash(dir)
-  return dir:sub(-1) == "/" and dir or (dir .. "/")
-end
-
---- Whether `path` is `dir` itself or is inside `dir`.
----@param path string
----@param dir string
----@return boolean
-local function path_under(path, dir)
-  local lhs = path
-  local rhs = dir
-  if vim.fn.has("win32") == 1 then
-    lhs = lhs:lower()
-    rhs = rhs:lower()
-  end
-  if lhs == rhs then
-    return true
-  end
-  local prefix = with_trailing_slash(rhs)
-  return lhs:sub(1, #prefix) == prefix
-end
-
----@param path string
----@param dir string
----@return string
-local function relative_to(path, dir)
-  local prefix = with_trailing_slash(dir)
-  return path:sub(#prefix + 1)
-end
-
 --- Build the default group name for a file.
 ---
---- The display part is relative to the working directory when possible, then
---- relative to the home directory with a leading `~/`, and otherwise the full
---- absolute path. The 8-character SHA-256 suffix keeps same-named files apart
---- and mirrors the id mo uses for file entries.
+--- The full path is used as the group name. Backslashes become forward slashes
+--- because mo rejects them in group names.
 ---@param path string
 ---@return string
 local function default_target(path)
-  local absolute = vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
-  local cwd = vim.fs.normalize(vim.fn.getcwd())
-  local home = vim.fs.normalize(vim.fn.expand("~"))
-
-  local name
-  if path_under(absolute, cwd) then
-    name = relative_to(absolute, cwd)
-  elseif path_under(absolute, home) then
-    name = "~/" .. relative_to(absolute, home)
-  else
-    name = absolute
-  end
-
-  -- mo group names cannot contain '?', '#', '\', or control characters.
-  name = name:gsub("[?#\\]", "_"):gsub("%c", "_")
-  return string.format("%s-%s", name, vim.fn.sha256(absolute):sub(1, 8))
+  return vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
 end
 
 --- Build the `mo` command used to add a file to the preview server.
