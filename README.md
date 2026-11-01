@@ -11,7 +11,6 @@ contents to a temporary file or sync unsaved changes to `mo`.
 
 - `:MoPreview` command to open the current buffer's file in `mo`.
 - `:MoPreview --close` to close the file again from the same group.
-- No filetype check: the buffer only needs a readable file on disk.
 - Uses the real file on disk, so `mo`'s native live-reload works on save.
 - Opens the exact file's deeplink, not just the `mo` server root.
 - Supports `mo` groups and custom ports.
