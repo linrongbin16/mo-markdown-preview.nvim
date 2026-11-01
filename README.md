@@ -1,8 +1,7 @@
 # mo-markdown-preview.nvim
 
 Preview the file backing the current Neovim buffer in your default browser,
-powered by [`mo`](https://github.com/k1LoW/mo). There is no filetype check;
-`mo` renders the file as Markdown.
+powered by [`mo`](https://github.com/k1LoW/mo).
 
 The plugin is deliberately small: it reads the current buffer's file name, calls
 the `mo` CLI with that path, and opens the resulting URL. It does not copy buffer
