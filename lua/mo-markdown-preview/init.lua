@@ -120,8 +120,11 @@ end
 ---
 --- Per-call options take precedence over the `setup()` configuration:
 --- `target` falls back to the configured target, `port` to the configured
---- port, and `open = false` only reports the preview URL. A nil target uses
---- the built-in per-file group.
+--- port, and `open = false` only reports the preview URL. `open = true`
+--- (`--open` or `!`) opens the browser here, via `vim.ui.open` on the file's
+--- deeplink, even when `open = false` is configured. mo always runs with
+--- `--no-open`, so a single call never opens two tabs. A nil target uses the
+--- built-in per-file group.
 ---@param opts table|nil May contain `bufnr`, `target`, `port`, and `open`.
 ---@return boolean started
 function M.open(opts)

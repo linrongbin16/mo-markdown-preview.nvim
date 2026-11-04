@@ -1,6 +1,12 @@
 local M = {}
 
-local close_conflict = "--close conflicts with --open and --no-open; these flags cannot be combined"
+--- Explain why two flags cannot be combined.
+---@param first string
+---@param second string
+---@return string
+local function conflict(first, second)
+	return string.format("%s conflicts with %s; these flags cannot be combined", first, second)
+end
 
 --- Split a command line into tokens, honoring single and double quotes.
 ---
@@ -54,15 +60,18 @@ end
 ---   --open            open a browser even when `open = false`
 ---
 --- `--flag=value` is accepted as well. `--no-open` and `--open` override each
---- other, so the last one wins. They can be disabled with
---- `parse_opts.allow_open = false`. `--close` conflicts with `--open`/`--no-open`.
+--- other, so the last one wins. `--close` selects the closing mode and
+--- conflicts with both of them.
+---
+--- `parse_opts.bang` is the `!` modifier, a shorthand for `--open` that always
+--- wins: neither `--open` nor `--no-open` can override it, wherever they
+--- appear. It conflicts with `--close`.
 ---@param input string
----@param parse_opts { allow_open?: boolean }|nil
+---@param parse_opts { bang?: boolean }|nil
 ---@return table|nil opts
 ---@return string|nil err
 function M.parse(input, parse_opts)
 	parse_opts = parse_opts or {}
-	local allow_open = parse_opts.allow_open ~= false
 
 	local tokens, token_err = tokenize(input or "")
 	if not tokens then
@@ -70,6 +79,8 @@ function M.parse(input, parse_opts)
 	end
 
 	local opts = {}
+	-- The open-mode flag seen last, so a conflict message can name it.
+	local open_flag = nil
 	local index = 1
 	while index <= #tokens do
 		local token = tokens[index]
@@ -114,32 +125,33 @@ function M.parse(input, parse_opts)
 			if inline ~= nil then
 				return nil, "--close does not take a value"
 			end
+			-- Report the `!` conflict first, so the message names the modifier
+			-- regardless of where --open/--no-open appear on the line.
+			if parse_opts.bang then
+				return nil, conflict("!", "--close")
+			end
 			if opts.open ~= nil then
-				return nil, close_conflict
+				return nil, conflict("--close", open_flag)
 			end
 			opts.close = true
 		elseif name == "--no-open" then
-			if not allow_open then
-				return nil, "--no-open is not supported by this command"
-			end
 			if inline ~= nil then
 				return nil, "--no-open does not take a value"
 			end
 			if opts.close then
-				return nil, close_conflict
+				return nil, conflict("--no-open", "--close")
 			end
 			opts.open = false
+			open_flag = "--no-open"
 		elseif name == "--open" then
-			if not allow_open then
-				return nil, "--open is not supported by this command"
-			end
 			if inline ~= nil then
 				return nil, "--open does not take a value"
 			end
 			if opts.close then
-				return nil, close_conflict
+				return nil, conflict("--open", "--close")
 			end
 			opts.open = true
+			open_flag = "--open"
 		elseif token:sub(1, 1) == "-" then
 			return nil, string.format("unknown option %s", vim.inspect(token))
 		else
@@ -152,6 +164,15 @@ function M.parse(input, parse_opts)
 		end
 
 		index = index + 1
+	end
+
+	if parse_opts.bang then
+		if opts.close then
+			return nil, conflict("!", "--close")
+		end
+		-- `!` is a shorthand for --open with the highest priority: it wins no
+		-- matter where --open or --no-open appear on the command line.
+		opts.open = true
 	end
 
 	return opts

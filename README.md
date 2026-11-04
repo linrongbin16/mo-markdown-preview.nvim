@@ -11,6 +11,7 @@ contents to a temporary file or sync unsaved changes to `mo`.
 
 - `:MoPreview` command to open the current buffer's file in `mo`.
 - `:MoPreview --close` to close the file again from the same group.
+- `:MoPreview!` as a shorthand for `--open` that always wins.
 - Uses the real file on disk, so `mo`'s native live-reload works on save.
 - Opens the exact file's deeplink, not just the `mo` server root.
 - Supports `mo` groups and custom ports.
@@ -104,14 +105,17 @@ Use `--no-open` to only report the preview URL without opening a browser:
 :MoPreview --no-open
 ```
 
-Use `--open` to force opening a browser for this call, even when
+Use `--open` to force opening the browser for this call, even when
 `open = false` is configured:
 
 ```vim
 :MoPreview --open
 ```
 
-`--no-open` and `--open` override each other, so the last one wins.
+`!` is a shorthand for `--open` and `:MoPreview!` is the same as
+`:MoPreview --open`. `--no-open` and `--open` override each other, so the last
+one wins, while `!` has the highest priority: it wins no matter where `--open`
+or `--no-open` appear, so `:MoPreview! --no-open` still opens the browser.
 
 The target and port flags can be combined with one of the mode flags, and
 `--flag=value` is accepted as well. Quote values that contain spaces:
@@ -131,9 +135,9 @@ Close the file again with `--close`:
 
 `--close` runs `mo --close` with the same target and port resolution as
 opening, so the defaults match. If you opened with `--target` or `--port`,
-pass the same flags (or configure them) to close the file. The open flags only
-apply when adding a file to `mo`, so `--close` conflicts with `--open` and
-`--no-open`; combining them is an error.
+pass the same flags (or configure them) to close the file. Opening and closing
+are different modes, so `--close` conflicts with `--open`, `--no-open`, and
+`!`; combining them is an error.
 
 The command requires the buffer to be backed by a readable file. If it is not,
 the plugin reports an error and does not call `mo`:
@@ -163,7 +167,7 @@ require("mo-markdown-preview").setup({
   port = nil,
 
   -- Open the preview URL in the default browser.
-  -- Overridden by --no-open / --open for one call.
+  -- Overridden by --no-open / --open / ! for one call.
   open = true,
 })
 ```
@@ -176,8 +180,9 @@ require("mo-markdown-preview").setup({
 | `open`   | `true`  | Open the URL in the default browser. Set `false` to only show the URL.   |
 
 Command flags override these options for a single call: `:MoPreview` accepts
-`--target`, `--port`, `--close`, `--no-open`, and `--open`. `--close` conflicts
-with `--open`/`--no-open`.
+`--target`, `--port`, `--close`, `--no-open`, and `--open`, plus the `!`
+modifier as a higher-priority `--open`. `--close` conflicts with `--open`,
+`--no-open`, and `!`.
 
 The Lua API is also available:
 
@@ -189,7 +194,7 @@ mo.open({ target = "docs" })   -- explicit mo group
 mo.open({ bufnr = 3, target = "api" })
 mo.open({ port = 6276 })       -- one call on another port
 mo.open({ open = false })      -- only report the URL
-mo.open({ open = true })       -- force opening the browser
+mo.open({ open = true })       -- force opening the browser for this call
 mo.open({ target = "docs", port = 6276, open = false })
 mo.close()                     -- close the current file
 mo.close({ target = "docs" })  -- close from a specific group
@@ -207,8 +212,11 @@ mo.close({ port = 6276 })      -- close on another port
    forward slashes on Windows) URI-encoded with RFC 3986; URL-path characters
    are kept and everything else becomes `%XX`.
 4. Parse `mo`'s JSON output, find the deeplink for `<file>`, and open it with
-   `vim.ui.open`. With `--no-open` (or `open = false`) the URL is only reported;
-   `--open` forces the browser open.
+   `vim.ui.open`. With `--no-open` (or `open = false`) the URL is only reported.
+
+`mo` always runs with `--no-open`; the `--open` flag and the `!` modifier only
+control whether the plugin calls `vim.ui.open`. That keeps a single call to one
+browser tab, and the tab always lands on the exact file's deeplink.
 
 `:MoPreview --close` runs `mo --close [--port PORT] --target GROUP <file>` with
 the same target and port resolution, then reports success or the error from
@@ -220,7 +228,8 @@ it.
 
 The plugin does **not** manage the `mo` server lifecycle: it never shuts the
 server down. `mo` is a shared, long-lived preview server that restores sessions
-across invocations. Use `mo --shutdown` to stop it.
+across invocations. Use `mo --clear` to close all the opened files, use
+`mo --shutdown` to stop it.
 
 ## Notes and limitations
 
@@ -243,12 +252,6 @@ need `mo` or a browser:
 ```sh
 make test
 ```
-
-## Credits
-
-- [`iamcco/markdown-preview.nvim`](https://github.com/iamcco/markdown-preview.nvim)
-  for the command/UX inspiration.
-- [`k1LoW/mo`](https://github.com/k1LoW/mo) for the Markdown viewer.
 
 ## License
 

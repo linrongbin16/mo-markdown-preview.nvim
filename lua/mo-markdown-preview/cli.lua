@@ -74,6 +74,9 @@ end
 
 --- Build the `mo` command used to add a file to the preview server, or to
 --- close it again.
+---
+--- mo always runs with `--no-open`: the plugin opens the file's deeplink
+--- itself, so `--open` is never passed and a single call cannot open two tabs.
 ---@param path string
 ---@param cfg table
 ---@param target string|nil

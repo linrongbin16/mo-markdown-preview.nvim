@@ -197,8 +197,10 @@ test("parses --target, --port, --close, --no-open, and --open", function()
   eq(assert(args.parse([[--target='my group']])).target, "my group")
   eq(assert(args.parse("--no-open")).open, false)
   eq(assert(args.parse("--open")).open, true)
+  -- --no-open and --open override each other; the last one wins.
   eq(assert(args.parse("--no-open --open")).open, true)
   eq(assert(args.parse("--open --no-open")).open, false)
+  eq(assert(args.parse("--open --no-open --open")).open, true)
   eq(assert(args.parse("--close")).close, true)
 
   for _, combined in ipairs({
@@ -226,6 +228,7 @@ test("parses --target, --port, --close, --no-open, and --open", function()
     { "--no-open=1", "--no-open" },
     { "--open=1", "--open" },
     { "--close=1", "--close" },
+    { "--clear", "unknown option" },
     { "--bogus", "unknown option" },
     { "docs", "use --target" },
     { [[--target "unterminated]], "unterminated quote" },
@@ -235,6 +238,50 @@ test("parses --target, --port, --close, --no-open, and --open", function()
     eq(value, nil, "should reject: " .. case[1])
     contains(case_err, case[2])
   end
+end)
+
+test("parses the bang modifier", function()
+  local args = require("mo-markdown-preview.args")
+
+  local bang = assert(args.parse("", { bang = true }))
+  eq(bang.open, true, "bang should be a shorthand for --open")
+
+  local plain = assert(args.parse(""))
+  eq(plain.open, nil)
+
+  eq(assert(args.parse("--open")).open, true)
+
+  -- `!` is a shorthand for --open with a higher priority than --open and
+  -- --no-open, wherever they appear.
+  for _, input in ipairs({
+    "--no-open",
+    "--open --no-open",
+    "--no-open --open",
+    "--target docs --port 6276 --no-open",
+  }) do
+    local parsed_bang = assert(args.parse(input, { bang = true }))
+    eq(parsed_bang.open, true, "bang should win over: " .. input)
+  end
+
+  -- `!` conflicts with --close, in any order and with extra flags.
+  for _, input in ipairs({
+    "--close",
+    "--target docs --close",
+    "--close --port 6276",
+    "--close --open",
+    "--close --no-open",
+  }) do
+    local value, conflict_err = args.parse(input, { bang = true })
+    eq(value, nil, "should reject: ! " .. input)
+    contains(conflict_err, "cannot be combined")
+    contains(conflict_err, "!")
+    contains(conflict_err, "--close")
+  end
+
+  -- Other invalid arguments still take precedence over the bang check.
+  local value, case_err = args.parse("--bogus", { bang = true })
+  eq(value, nil)
+  contains(case_err, "unknown option")
 end)
 
 test("passes the current file to mo", function()
@@ -332,8 +379,7 @@ test("accepts a quoted target value", function()
   check(has_arg("my group"), "quoted target should reach mo as one argument")
 end)
 
-test("--open overrides open = false", function()
-  setup({ open = false })
+test("MoPreview --open opens the deeplink with vim.ui.open", function()
   local path = tmp .. "/force-open.md"
   open_buffer(path, "# Force open\n")
 
@@ -342,7 +388,127 @@ test("--open overrides open = false", function()
     return opened ~= nil
   end, "browser was not opened")
 
-  eq(config.get().open, false, "--open must not change the configuration")
+  eq(opened, "http://localhost:6275/?file=fake", "the file deeplink should be opened")
+  check(has_arg("--no-open"), "mo must always run with --no-open")
+  check(not has_arg("--open"), "mo must never receive --open")
+end)
+
+test("MoPreview --open wins over an earlier --no-open", function()
+  local path = tmp .. "/open-wins.md"
+  open_buffer(path, "# Open wins\n")
+
+  vim.cmd("MoPreview --no-open --open")
+  wait_for(function()
+    return opened ~= nil
+  end, "browser was not opened")
+
+  eq(opened, "http://localhost:6275/?file=fake")
+  check(not has_arg("--open"), "mo must never receive --open")
+end)
+
+test("MoPreview --no-open after --open wins", function()
+  local path = tmp .. "/no-open-wins.md"
+  open_buffer(path, "# No open wins\n")
+
+  vim.cmd("MoPreview --open --no-open")
+  wait_for(function()
+    return notified_text():find("http://localhost:6275", 1, true) ~= nil
+  end, "preview URL was not reported")
+
+  eq(opened, nil, "browser must not open with --no-open")
+  check(has_arg("--no-open"), "mo must always run with --no-open")
+  check(not has_arg("--open"), "mo must never receive --open")
+end)
+
+test("MoPreview! opens the file deeplink with vim.ui.open", function()
+  local path = tmp .. "/bang-wins.md"
+  open_buffer(path, "# Bang wins\n")
+
+  -- `!` is a shorthand for --open, so every variant must open the deeplink
+  -- through the plugin and never ask mo to open the group URL.
+  for _, command in ipairs({
+    "MoPreview!",
+    "MoPreview! --no-open",
+    "MoPreview! --open",
+    "MoPreview! --target docs --no-open",
+    "MoPreview! --no-open --target docs",
+  }) do
+    reset_log()
+    opened = nil
+    notified = {}
+    vim.cmd(command)
+    wait_for(function()
+      return opened ~= nil
+    end, "browser was not opened for " .. command)
+
+    eq(opened, "http://localhost:6275/?file=fake", "should open the deeplink for: " .. command)
+    check(has_arg("--no-open"), "mo must always run with --no-open for: " .. command)
+    check(not has_arg("--open"), "mo must never receive --open for: " .. command)
+    check(has_arg("--json"), "mo must still return JSON for: " .. command)
+  end
+end)
+
+test("MoPreview! overrides open = false", function()
+  setup({ open = false })
+  local path = tmp .. "/bang-configured.md"
+  open_buffer(path, "# Bang configured\n")
+
+  vim.cmd("MoPreview!")
+  wait_for(function()
+    return opened ~= nil
+  end, "browser was not opened")
+
+  eq(opened, "http://localhost:6275/?file=fake", "bang should open the deeplink")
+  eq(config.get().open, false, "bang must not change the configuration")
+  check(not has_arg("--open"), "mo must never receive --open")
+end)
+
+test("keeps mo on --no-open for the configured open = true", function()
+  setup({ open = true })
+  local path = tmp .. "/configured-open.md"
+  open_buffer(path, "# Configured open\n")
+
+  vim.cmd("MoPreview")
+  wait_for(function()
+    return opened ~= nil
+  end, "browser was not opened")
+
+  eq(opened, "http://localhost:6275/?file=fake", "the deeplink should be opened")
+  check(has_arg("--no-open"), "mo must always run with --no-open")
+  check(not has_arg("--open"), "mo must never receive --open")
+end)
+
+test("never passes --open to mo", function()
+  for _, command in ipairs({ "MoPreview", "MoPreview!", "MoPreview --open", "MoPreview --no-open" }) do
+    reset_log()
+    opened = nil
+    notified = {}
+    vim.cmd(command)
+    vim.wait(3000, function()
+      return opened ~= nil or notified_text():find("http://localhost:6275", 1, true) ~= nil
+    end, 20)
+
+    check(not has_arg("--open"), "mo must never receive --open for: " .. command)
+  end
+end)
+
+test("rejects MoPreview! combined with --close", function()
+  local path = tmp .. "/bang-close.md"
+  open_buffer(path, "# Bang close\n")
+
+  for _, command in ipairs({
+    "MoPreview! --close",
+    "MoPreview! --close --target docs",
+    "MoPreview! --target docs --close",
+    "MoPreview! --close --port 6200",
+  }) do
+    notified = {}
+    vim.cmd(command)
+    contains(notified_text(), "cannot be combined", "should reject: " .. command)
+    contains(notified_text(), "!", "error should name the ! modifier")
+  end
+
+  eq(log_text(), "", "mo must not run for conflicting flags")
 end)
 
 test("closes the current file with MoPreview --close", function()
@@ -395,10 +561,10 @@ test("rejects --close combined with --open or --no-open", function()
   open_buffer(path, "# Bad close\n")
 
   for _, command in ipairs({
-    "MoPreview --close --open",
-    "MoPreview --open --close",
     "MoPreview --close --no-open",
     "MoPreview --no-open --close",
+    "MoPreview --close --open",
+    "MoPreview --open --close",
   }) do
     notified = {}
     vim.cmd(command)
