@@ -837,6 +837,32 @@ test("reports a missing mo executable", function()
   check(opened == nil, "browser must not open")
 end)
 
+test("does not expose the internal configuration table", function()
+  config.reset()
+
+  -- Mutating what get() returns must not change the plugin configuration.
+  local snapshot = config.get()
+  snapshot.open = false
+  snapshot.port = 9999
+  eq(config.get().open, true, "mutating get() must not change open")
+  eq(config.get().port, nil, "mutating get() must not change port")
+
+  -- Each call returns an independent copy.
+  local first = config.get()
+  local second = config.get()
+  check(not rawequal(first, second), "get() should return a new table each time")
+  first.open = false
+  eq(second.open, true, "one snapshot must not affect another")
+
+  -- The same holds for the table setup() returns.
+  local returned = config.setup({ port = 6200 })
+  eq(config.get().port, 6200, "setup() should apply the configuration")
+  returned.port = 7777
+  eq(config.get().port, 6200, "mutating setup()'s result must not change the configuration")
+  returned.open = false
+  eq(config.get().open, true, "mutating setup()'s result must not change open")
+end)
+
 test("reports invalid configuration without applying it", function()
   local before = config.get()
 
@@ -845,7 +871,8 @@ test("reports invalid configuration without applying it", function()
     local after = preview.setup(opts)
     contains(notified_text(), field)
     eq(notified[1].level, vim.log.levels.ERROR)
-    eq(after, before)
+    -- get()/setup() return copies, so compare by value instead of identity.
+    check(vim.deep_equal(after, before), "invalid configuration must not be applied")
   end
 
   expect_invalid({ cmd = "" }, "cmd")

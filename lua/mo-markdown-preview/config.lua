@@ -46,29 +46,38 @@ local function validate(opts)
 end
 
 --- Update the plugin configuration.
+---
+--- The returned table is a copy, so callers cannot mutate the configuration
+--- through it.
 ---@param opts table|nil
 ---@return table
 function M.setup(opts)
 	opts = opts or {}
 	if not validate(opts) then
-		return current
+		return M.get()
 	end
 	-- A shallow merge is intentional: option values are replaced wholesale
 	-- instead of being merged key by key.
 	current = vim.tbl_extend("force", vim.deepcopy(M.defaults), opts)
-	return current
+	return M.get()
 end
 
+--- Return a copy of the current configuration.
+---
+--- The configuration table is internal state: handing out the table itself
+--- would let any caller (another plugin, a user config, a test) change the
+--- plugin's behaviour by mutating it. Callers who need to derive a per-call
+--- configuration get their own copy to extend.
 ---@return table
 function M.get()
-	return current
+	return vim.deepcopy(current)
 end
 
 --- Restore defaults. Mostly useful for tests.
 ---@return table
 function M.reset()
 	current = vim.deepcopy(M.defaults)
-	return current
+	return M.get()
 end
 
 return M
