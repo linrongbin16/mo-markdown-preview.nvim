@@ -147,8 +147,14 @@ function M.open(opts)
 
 		local url = cli.find_url(data, ctx.path)
 		if not url then
+			-- mo accepted the command but did not add this file, which happens
+			-- when it rejects the file itself (for example a binary file).
+			-- Say so instead of opening an unrelated page.
 			util.notify(
-				string.format("mo did not return a preview URL for %s", vim.inspect(ctx.path)),
+				string.format(
+					"mo did not add %s to the preview (it may not be a file mo can render)",
+					vim.inspect(ctx.path)
+				),
 				vim.log.levels.ERROR
 			)
 			return

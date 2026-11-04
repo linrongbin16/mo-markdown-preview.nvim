@@ -161,6 +161,7 @@ local function test(name, fn)
   setup()
   vim.env.MO_FAKE_FAIL = ""
   vim.env.MO_FAKE_MULTI = ""
+  vim.env.MO_FAKE_EMPTY = ""
 
   local ok, err = xpcall(fn, debug.traceback)
   if ok then
@@ -727,6 +728,41 @@ test("finds the exact file when mo returns several files", function()
   end, "browser was not opened")
 
   eq(opened, "http://localhost:6275/?file=match")
+end)
+
+test("does not fall back to a lone file that is not the buffer", function()
+  -- mo reported exactly one file, but it is a different file. Returning it
+  -- would open someone else's preview, so the lookup must miss.
+  local data = {
+    url = "http://localhost:6275",
+    files = {
+      { url = "http://localhost:6275/?file=other", path = "/tmp/other.md" },
+    },
+  }
+
+  eq(cli.find_url(data, "/tmp/wanted.md"), nil, "a lone unrelated file must not be returned")
+end)
+
+test("does not fall back to the group URL when mo added no files", function()
+  -- mo answers with an empty file list when it rejects the file (a binary
+  -- file, for example). The group URL is a different page, so it must not be
+  -- returned as if the file had been added.
+  eq(cli.find_url({ url = "http://localhost:6275", files = {} }, "/tmp/wanted.md"), nil)
+  eq(cli.find_url({ url = "http://localhost:6275" }, "/tmp/wanted.md"), nil)
+end)
+
+test("reports when mo does not add the file", function()
+  vim.env.MO_FAKE_EMPTY = "1"
+  local path = tmp .. "/rejected.md"
+  open_buffer(path, "# Rejected\n")
+
+  check(preview.open(), "preview should start")
+  wait_for(function()
+    return notified_text():find("did not add", 1, true) ~= nil
+  end, "the missing preview was not reported")
+
+  eq(opened, nil, "no page must be opened when mo did not add the file")
+  contains(notified_text(), "rejected.md")
 end)
 
 test("matches symlinked paths the way mo reports them", function()

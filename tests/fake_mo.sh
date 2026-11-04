@@ -26,6 +26,15 @@ if [ "${MO_FAKE_MULTI:-0}" = "1" ]; then
   exit 0
 fi
 
+# mo exits 0 with an empty file list when it rejects a file (binary, unreadable).
+if [ "${MO_FAKE_EMPTY:-0}" = "1" ]; then
+  printf '{\n'
+  printf '  "url": "http://localhost:6275",\n'
+  printf '  "files": []\n'
+  printf '}\n'
+  exit 0
+fi
+
 printf '{\n'
 printf '  "url": "http://localhost:6275",\n'
 printf '  "files": [\n'

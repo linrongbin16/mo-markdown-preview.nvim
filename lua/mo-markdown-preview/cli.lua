@@ -112,6 +112,12 @@ function M.decode(stdout)
 end
 
 --- Find the deeplink for `path` in the JSON returned by `mo --json`.
+---
+--- Only an exact path match is accepted. mo returns the files it actually
+--- added, so there is no need to guess: falling back to a lone entry or to the
+--- group URL would open a different file (or a different page) whenever the
+--- lookup misses. A miss means mo did not add this file, and the caller
+--- reports that instead of opening something unrelated.
 ---@param data table
 ---@param path string
 ---@return string|nil
@@ -125,19 +131,6 @@ function M.find_url(data, path)
         return file.url
       end
     end
-  end
-
-  -- Some older/simpler mo invocations only return one file. Accept it when
-  -- there is no ambiguity.
-  if #files == 1 and type(files[1]) == "table" and type(files[1].url) == "string" then
-    return files[1].url
-  end
-
-  -- If mo returned no files at all, the group URL is still a useful fallback.
-  -- Never fall back to it when other files were returned: opening a different
-  -- file would be worse than reporting an error.
-  if #files == 0 and type(data.url) == "string" and data.url ~= "" then
-    return data.url
   end
 
   return nil
