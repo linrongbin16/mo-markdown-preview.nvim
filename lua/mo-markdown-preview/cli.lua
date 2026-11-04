@@ -2,8 +2,6 @@ local util = require("mo-markdown-preview.util")
 
 local M = {}
 
-local uv = vim.uv or vim.loop
-
 local function executable(cfg)
   local name = vim.fn.expand(cfg.cmd)
   local exe = vim.fn.exepath(name)
@@ -18,14 +16,20 @@ local function executable(cfg)
   return exe
 end
 
+--- Normalize a path so two spellings of the same file compare equal.
+---
+--- This must mirror what mo does to the paths it reports, so the deeplink
+--- lookup can match them. mo resolves the argument with Go's `filepath.Abs`,
+--- which is purely lexical: it makes the path absolute and collapses `.`, `..`
+--- and repeated separators, but it does **not** resolve symlinks. Resolving
+--- them here (for example with `uv.fs_realpath`) would make a symlinked file
+--- never match the path mo returns, and when several files come back the
+--- lookup would fall back to the wrong deeplink.
+---@param path string
+---@return string
 local function normalize_path(path)
   local normalized = vim.fn.fnamemodify(path, ":p")
-
-  local ok, real = pcall(uv.fs_realpath, normalized)
-  if ok and real then
-    normalized = real
-  end
-
+  normalized = vim.fs.normalize(normalized)
   normalized = normalized:gsub("\\", "/")
   if vim.fn.has("win32") == 1 then
     normalized = normalized:lower()

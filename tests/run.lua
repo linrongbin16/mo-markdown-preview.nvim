@@ -729,6 +729,58 @@ test("finds the exact file when mo returns several files", function()
   eq(opened, "http://localhost:6275/?file=match")
 end)
 
+test("matches symlinked paths the way mo reports them", function()
+  -- mo resolves arguments with Go's filepath.Abs, which does not resolve
+  -- symlinks. The lookup must compare the same spelling, otherwise two symlinks
+  -- pointing at one file collapse onto the first deeplink.
+  local root = tmp .. "/symlink"
+  vim.fn.mkdir(root .. "/real", "p")
+  vim.fn.mkdir(root .. "/l1", "p")
+  vim.fn.mkdir(root .. "/l2", "p")
+
+  local real = root .. "/real/a.md"
+  write_file(real, "# a\n")
+
+  local link1 = root .. "/l1/a.md"
+  local link2 = root .. "/l2/a.md"
+  assert(vim.uv.fs_symlink(real, link1), "should create symlink 1")
+  assert(vim.uv.fs_symlink(real, link2), "should create symlink 2")
+
+  local data = {
+    url = "http://localhost:6275",
+    files = {
+      { url = "http://localhost:6275/?file=ID1", path = link1 },
+      { url = "http://localhost:6275/?file=ID2", path = link2 },
+    },
+  }
+
+  eq(cli.find_url(data, link1), "http://localhost:6275/?file=ID1", "link1 should resolve to its own deeplink")
+  eq(cli.find_url(data, link2), "http://localhost:6275/?file=ID2", "link2 should resolve to its own deeplink")
+  eq(cli.find_url(data, real), nil, "the real path is not a match when mo reported the symlinks")
+end)
+
+test("normalizes . and .. without resolving symlinks", function()
+  local root = tmp .. "/normalize"
+  vim.fn.mkdir(root .. "/real", "p")
+
+  local real = root .. "/real/a.md"
+  write_file(real, "# a\n")
+
+  local data = {
+    url = "http://localhost:6275",
+    files = {
+      { url = "http://localhost:6275/?file=REAL", path = real },
+    },
+  }
+
+  -- Redundant separators and dot segments must still match.
+  local dotty = root .. "/real/./a.md"
+  eq(cli.find_url(data, dotty), "http://localhost:6275/?file=REAL", "dot segments should normalize")
+
+  local dotted = root .. "/real/../real/a.md"
+  eq(cli.find_url(data, dotted), "http://localhost:6275/?file=REAL", ".. segments should normalize")
+end)
+
 test("does not check the buffer filetype", function()
   local path = tmp .. "/notes.txt"
   open_buffer(path, "plain text\n")
