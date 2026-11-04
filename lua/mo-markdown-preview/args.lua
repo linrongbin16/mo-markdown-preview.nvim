@@ -5,7 +5,7 @@ local M = {}
 ---@param second string
 ---@return string
 local function conflict(first, second)
-	return string.format("%s conflicts with %s; these flags cannot be combined", first, second)
+  return string.format("%s conflicts with %s; these flags cannot be combined", first, second)
 end
 
 --- Split a command line into tokens, honoring single and double quotes.
@@ -16,38 +16,38 @@ end
 ---@return string[]|nil
 ---@return string|nil
 local function tokenize(input)
-	local tokens = {}
-	local index = 1
-	while index <= #input do
-		if input:sub(index, index):match("%s") then
-			index = index + 1
-		else
-			local parts = {}
-			local quote = nil
-			while index <= #input do
-				local char = input:sub(index, index)
-				if quote then
-					if char == quote then
-						quote = nil
-					else
-						parts[#parts + 1] = char
-					end
-				elseif char == '"' or char == "'" then
-					quote = char
-				elseif char:match("%s") then
-					break
-				else
-					parts[#parts + 1] = char
-				end
-				index = index + 1
-			end
-			if quote then
-				return nil, "unterminated quote in arguments"
-			end
-			tokens[#tokens + 1] = table.concat(parts)
-		end
-	end
-	return tokens
+  local tokens = {}
+  local index = 1
+  while index <= #input do
+    if input:sub(index, index):match("%s") then
+      index = index + 1
+    else
+      local parts = {}
+      local quote = nil
+      while index <= #input do
+        local char = input:sub(index, index)
+        if quote then
+          if char == quote then
+            quote = nil
+          else
+            parts[#parts + 1] = char
+          end
+        elseif char == '"' or char == "'" then
+          quote = char
+        elseif char:match("%s") then
+          break
+        else
+          parts[#parts + 1] = char
+        end
+        index = index + 1
+      end
+      if quote then
+        return nil, "unterminated quote in arguments"
+      end
+      tokens[#tokens + 1] = table.concat(parts)
+    end
+  end
+  return tokens
 end
 
 --- Parse the arguments accepted by :MoPreview.
@@ -71,111 +71,108 @@ end
 ---@return table|nil opts
 ---@return string|nil err
 function M.parse(input, parse_opts)
-	parse_opts = parse_opts or {}
+  parse_opts = parse_opts or {}
 
-	local tokens, token_err = tokenize(input or "")
-	if not tokens then
-		return nil, token_err
-	end
+  local tokens, token_err = tokenize(input or "")
+  if not tokens then
+    return nil, token_err
+  end
 
-	local opts = {}
-	-- The open-mode flag seen last, so a conflict message can name it.
-	local open_flag = nil
-	local index = 1
-	while index <= #tokens do
-		local token = tokens[index]
-		local name, inline = token:match("^(%-%-[%w%-]+)=(.*)$")
-		name = name or token
+  local opts = {}
+  -- The open-mode flag seen last, so a conflict message can name it.
+  local open_flag = nil
+  local index = 1
+  while index <= #tokens do
+    local token = tokens[index]
+    local name, inline = token:match("^(%-%-[%w%-]+)=(.*)$")
+    name = name or token
 
-		if name == "--target" then
-			local value = inline
-			if value == nil then
-				index = index + 1
-				value = tokens[index]
-				if value ~= nil and value:sub(1, 2) == "--" then
-					value = nil
-				end
-			end
-			if value == nil or value == "" then
-				return nil, "--target requires a non-empty group name"
-			end
-			opts.target = value
-		elseif name == "--port" then
-			local value = inline
-			if value == nil then
-				index = index + 1
-				value = tokens[index]
-				if value ~= nil and value:sub(1, 2) == "--" then
-					value = nil
-				end
-			end
-			if value == nil or value == "" then
-				return nil, "--port requires a port number"
-			end
-			local port = value:match("^%d+$") and tonumber(value)
-			if not port or port < 1 or port > 65535 then
-				return nil,
-					string.format(
-						"invalid --port value %s (expected an integer between 1 and 65535)",
-						vim.inspect(value)
-					)
-			end
-			opts.port = port
-		elseif name == "--close" then
-			if inline ~= nil then
-				return nil, "--close does not take a value"
-			end
-			-- Report the `!` conflict first, so the message names the modifier
-			-- regardless of where --open/--no-open appear on the line.
-			if parse_opts.bang then
-				return nil, conflict("!", "--close")
-			end
-			if opts.open ~= nil then
-				return nil, conflict("--close", open_flag)
-			end
-			opts.close = true
-		elseif name == "--no-open" then
-			if inline ~= nil then
-				return nil, "--no-open does not take a value"
-			end
-			if opts.close then
-				return nil, conflict("--no-open", "--close")
-			end
-			opts.open = false
-			open_flag = "--no-open"
-		elseif name == "--open" then
-			if inline ~= nil then
-				return nil, "--open does not take a value"
-			end
-			if opts.close then
-				return nil, conflict("--open", "--close")
-			end
-			opts.open = true
-			open_flag = "--open"
-		elseif token:sub(1, 1) == "-" then
-			return nil, string.format("unknown option %s", vim.inspect(token))
-		else
-			return nil,
-				string.format(
-					"unexpected argument %s; use --target %s (quote values containing spaces)",
-					vim.inspect(token),
-					vim.inspect(token)
-				)
-		end
+    if name == "--target" then
+      local value = inline
+      if value == nil then
+        index = index + 1
+        value = tokens[index]
+        if value ~= nil and value:sub(1, 2) == "--" then
+          value = nil
+        end
+      end
+      if value == nil or value == "" then
+        return nil, "--target requires a non-empty group name"
+      end
+      opts.target = value
+    elseif name == "--port" then
+      local value = inline
+      if value == nil then
+        index = index + 1
+        value = tokens[index]
+        if value ~= nil and value:sub(1, 2) == "--" then
+          value = nil
+        end
+      end
+      if value == nil or value == "" then
+        return nil, "--port requires a port number"
+      end
+      local port = value:match("^%d+$") and tonumber(value)
+      if not port or port < 1 or port > 65535 then
+        return nil,
+          string.format("invalid --port value %s (expected an integer between 1 and 65535)", vim.inspect(value))
+      end
+      opts.port = port
+    elseif name == "--close" then
+      if inline ~= nil then
+        return nil, "--close does not take a value"
+      end
+      -- Report the `!` conflict first, so the message names the modifier
+      -- regardless of where --open/--no-open appear on the line.
+      if parse_opts.bang then
+        return nil, conflict("!", "--close")
+      end
+      if opts.open ~= nil then
+        return nil, conflict("--close", open_flag)
+      end
+      opts.close = true
+    elseif name == "--no-open" then
+      if inline ~= nil then
+        return nil, "--no-open does not take a value"
+      end
+      if opts.close then
+        return nil, conflict("--no-open", "--close")
+      end
+      opts.open = false
+      open_flag = "--no-open"
+    elseif name == "--open" then
+      if inline ~= nil then
+        return nil, "--open does not take a value"
+      end
+      if opts.close then
+        return nil, conflict("--open", "--close")
+      end
+      opts.open = true
+      open_flag = "--open"
+    elseif token:sub(1, 1) == "-" then
+      return nil, string.format("unknown option %s", vim.inspect(token))
+    else
+      return nil,
+        string.format(
+          "unexpected argument %s; use --target %s (quote values containing spaces)",
+          vim.inspect(token),
+          vim.inspect(token)
+        )
+    end
 
-		index = index + 1
-	end
+    index = index + 1
+  end
 
-	if parse_opts.bang then
-		if opts.close then
-			return nil, conflict("!", "--close")
-		end
-		-- `!` is a shorthand for --open with the highest priority: it wins no
-		-- matter where --open or --no-open appear on the command line.
-		opts.open = true
-	end
+  if parse_opts.bang then
+    if opts.close then
+      return nil, conflict("!", "--close")
+    end
+    -- `!` is a shorthand for --open with the highest priority: it wins no
+    -- matter where --open or --no-open appear on the command line.
+    opts.open = true
+  end
 
-	return opts
+  return opts
 end
 
 return M

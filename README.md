@@ -253,6 +253,14 @@ need `mo` or a browser:
 make test
 ```
 
+Lua sources are formatted with [StyLua](https://github.com/JohnnyMorganz/StyLua)
+using the settings in `.stylua.toml` (2-space indent, 120 columns):
+
+```sh
+make fmt         # reformat lua/ plugin/ tests/
+make fmt-check   # fail if anything is unformatted
+```
+
 ## License
 
 MIT

@@ -21,10 +21,7 @@ local function parse(opts, usage)
   local args = require("mo-markdown-preview.args")
   local parsed, err = args.parse(opts.args, { bang = opts.bang })
   if not parsed then
-    require("mo-markdown-preview.util").notify(
-      string.format("%s\nusage: %s", err, usage),
-      vim.log.levels.ERROR
-    )
+    require("mo-markdown-preview.util").notify(string.format("%s\nusage: %s", err, usage), vim.log.levels.ERROR)
     return nil
   end
   return parsed
