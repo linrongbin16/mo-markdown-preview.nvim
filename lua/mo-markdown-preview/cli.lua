@@ -158,7 +158,6 @@ local function start(cmd, cfg, callback)
 
   local ok, proc = pcall(vim.system, cmd, {
     text = true,
-    timeout = 30000,
     cwd = vim.fn.getcwd(),
   }, function(obj)
     vim.schedule(function()
