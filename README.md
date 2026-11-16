@@ -11,6 +11,7 @@ contents to a temporary file or sync unsaved changes to `mo`.
 
 - `:MoPreview` command to open the current buffer's file in `mo`.
 - `:MoPreview --close` to close the file again from the same group.
+- `:MoPreview --clear` to empty a whole `mo` port in one call.
 - `:MoPreview!` as a shorthand for `--open` that always wins.
 - Uses the real file on disk, so `mo`'s native live-reload works on save.
 - Opens the exact file's deeplink, not just the `mo` server root.
@@ -133,21 +134,30 @@ Close the file again with `--close`:
 :MoPreview --close --port 6276
 ```
 
+Empty the whole `mo` port with `--clear`:
+
+```vim
+:MoPreview --clear
+:MoPreview --clear --port 6276
+```
+
 `--close` runs `mo --close` with the same target and port resolution as
 opening, so the defaults match. If you opened with `--target` or `--port`,
 pass the same flags (or configure them) to close the file. Opening and closing
 are different modes, so `--close` conflicts with `--open`, `--no-open`, and
 `!`; combining them is an error.
 
+`--clear` runs `mo --clear`: it shuts the server down, drops the saved session
+for that port, and starts a fresh, empty server on the same port. Already open
+preview tabs reconnect to the new server and show an empty list. Because it
+works on a whole port instead of a file, it takes no buffer, needs no file on
+disk, and conflicts with `--close`, `--no-open`, `--open`, `!`, and `--target`.
+Only `--port` applies.
+
 The command requires the buffer to be backed by a readable file. If it is not,
-the plugin reports an error and does not call `mo`:
-
-```text
-mo-markdown-preview: current buffer is not backed by a readable file: /path/to/file.md
-```
-
-Save the buffer to refresh the preview. `mo` watches the file and reloads it,
-but unsaved edits are never sent to `mo`.
+the plugin reports an error and does not call `mo`. Save the buffer to refresh
+the preview. `mo` watches the file and reloads it, but unsaved edits are never
+sent to `mo`.
 
 ## Configuration
 
@@ -180,9 +190,10 @@ require("mo-markdown-preview").setup({
 | `open`   | `true`  | Open the URL in the default browser. Set `false` to only show the URL.   |
 
 Command flags override these options for a single call: `:MoPreview` accepts
-`--target`, `--port`, `--close`, `--no-open`, and `--open`, plus the `!`
-modifier as a higher-priority `--open`. `--close` conflicts with `--open`,
-`--no-open`, and `!`.
+`--target`, `--port`, `--close`, `--clear`, `--no-open`, and `--open`, plus the
+`!` modifier as a higher-priority `--open`. `--close` conflicts with `--open`,
+`--no-open`, and `!`. `--clear` conflicts with all of them and with
+`--target`.
 
 The Lua API is also available:
 
@@ -199,6 +210,8 @@ mo.open({ target = "docs", port = 6276, open = false })
 mo.close()                     -- close the current file
 mo.close({ target = "docs" })  -- close from a specific group
 mo.close({ port = 6276 })      -- close on another port
+mo.clear()                     -- empty the configured port
+mo.clear({ port = 6276 })      -- empty another port
 ```
 
 ## How it works
@@ -222,14 +235,19 @@ browser tab, and the tab always lands on the exact file's deeplink.
 the same target and port resolution, then reports success or the error from
 `mo`.
 
+`:MoPreview --clear` runs `mo --clear [--port PORT]` with `y` written to its
+standard input. `mo` exits 0 both when it clears and when it cancels, so the
+plugin reads `mo`'s stderr to tell the two apart and reports which one happened.
+
 No file is written, no buffer contents are copied, and no autocmds are
 installed. `mo` reads the file from disk and handles reloading when Neovim saves
 it.
 
-The plugin does **not** manage the `mo` server lifecycle: it never shuts the
-server down. `mo` is a shared, long-lived preview server that restores sessions
-across invocations. Use `mo --clear` to close all the opened files, use
-`mo --shutdown` to stop it.
+The plugin does **not** manage the `mo` server lifecycle by itself: it never
+shuts the server down unless you ask for it. `mo` is a shared, long-lived
+preview server that restores sessions across invocations. Use
+`:MoPreview --clear` to empty a port and restart its server, and
+`mo --shutdown` to stop it without touching the saved session.
 
 ## Notes and limitations
 
