@@ -56,16 +56,19 @@ end
 ---   --target TARGET   mo group name for this call
 ---   --port PORT       mo server port for this call
 ---   --close           close the file instead of opening it
+---   --clear           clear every file from the port's session
 ---   --no-open         do not open a browser; only report the URL
 ---   --open            open a browser even when `open = false`
 ---
 --- `--flag=value` is accepted as well. `--no-open` and `--open` override each
 --- other, so the last one wins. `--close` selects the closing mode and
---- conflicts with both of them.
+--- conflicts with both of them. `--clear` is a third mode that works on a
+--- whole port instead of one file, so it conflicts with the file-scoped
+--- `--close`, with `--open`/`--no-open`, and with `--target`.
 ---
 --- `parse_opts.bang` is the `!` modifier, a shorthand for `--open` that always
 --- wins: neither `--open` nor `--no-open` can override it, wherever they
---- appear. It conflicts with `--close`.
+--- appear. It conflicts with `--close` and `--clear`.
 ---@param input string
 ---@param parse_opts { bang?: boolean }|nil
 ---@return table|nil opts
@@ -99,6 +102,9 @@ function M.parse(input, parse_opts)
       if value == nil or value == "" then
         return nil, "--target requires a non-empty group name"
       end
+      if opts.clear then
+        return nil, conflict("--target", "--clear")
+      end
       opts.target = value
     elseif name == "--port" then
       local value = inline
@@ -122,6 +128,9 @@ function M.parse(input, parse_opts)
       if inline ~= nil then
         return nil, "--close does not take a value"
       end
+      if opts.clear then
+        return nil, conflict("--close", "--clear")
+      end
       -- Report the `!` conflict first, so the message names the modifier
       -- regardless of where --open/--no-open appear on the line.
       if parse_opts.bang then
@@ -131,12 +140,32 @@ function M.parse(input, parse_opts)
         return nil, conflict("--close", open_flag)
       end
       opts.close = true
+    elseif name == "--clear" then
+      if inline ~= nil then
+        return nil, "--clear does not take a value"
+      end
+      if parse_opts.bang then
+        return nil, conflict("!", "--clear")
+      end
+      if opts.open ~= nil then
+        return nil, conflict("--clear", open_flag)
+      end
+      if opts.close then
+        return nil, conflict("--clear", "--close")
+      end
+      if opts.target ~= nil then
+        return nil, conflict("--clear", "--target")
+      end
+      opts.clear = true
     elseif name == "--no-open" then
       if inline ~= nil then
         return nil, "--no-open does not take a value"
       end
       if opts.close then
         return nil, conflict("--no-open", "--close")
+      end
+      if opts.clear then
+        return nil, conflict("--no-open", "--clear")
       end
       opts.open = false
       open_flag = "--no-open"
@@ -146,6 +175,9 @@ function M.parse(input, parse_opts)
       end
       if opts.close then
         return nil, conflict("--open", "--close")
+      end
+      if opts.clear then
+        return nil, conflict("--open", "--clear")
       end
       opts.open = true
       open_flag = "--open"
@@ -166,6 +198,9 @@ function M.parse(input, parse_opts)
   if parse_opts.bang then
     if opts.close then
       return nil, conflict("!", "--close")
+    end
+    if opts.clear then
+      return nil, conflict("!", "--clear")
     end
     -- `!` is a shorthand for --open with the highest priority: it wins no
     -- matter where --open or --no-open appear on the command line.

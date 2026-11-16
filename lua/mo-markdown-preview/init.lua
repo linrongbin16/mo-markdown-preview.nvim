@@ -35,6 +35,16 @@ local function report_failure(result)
   util.notify(string.format("mo exited with code %s: %s", vim.inspect(code), util.trim(output)), vim.log.levels.ERROR)
 end
 
+--- Describe the port a command runs against, for messages.
+---@param cfg table
+---@return string
+local function port_label(cfg)
+  if cfg.port then
+    return tostring(cfg.port)
+  end
+  return "the default port"
+end
+
 ---@class mo.markdown.preview.Context
 ---@field path string
 ---@field target string|nil
@@ -189,6 +199,77 @@ function M.close(opts)
     end
 
     util.notify(string.format("closed %s", vim.inspect(ctx.path)))
+  end)
+end
+
+--- Resolve the per-call configuration for a port-scoped command.
+---
+--- `--clear` works on a whole mo port, so there is no buffer to resolve and
+--- the file-scoped options are rejected rather than silently ignored.
+---@param opts table
+---@return table|nil call_cfg
+local function resolve_port(opts)
+  if opts.target ~= nil and opts.target ~= "" then
+    util.notify("target is not supported by clear(); --clear works on a whole port", vim.log.levels.ERROR)
+    return nil
+  end
+
+  if opts.open ~= nil then
+    util.notify("open is not supported by clear()", vim.log.levels.ERROR)
+    return nil
+  end
+
+  local port = opts.port
+  if port ~= nil and (type(port) ~= "number" or port % 1 ~= 0 or port < 1 or port > 65535) then
+    util.notify("port must be an integer between 1 and 65535, or nil", vim.log.levels.ERROR)
+    return nil
+  end
+
+  local cfg = config.get()
+  if port ~= nil then
+    cfg = vim.tbl_extend("force", cfg, { port = port })
+  end
+  return cfg
+end
+
+--- Clear every file from a mo port's session.
+---
+--- This runs `mo --clear`, which shuts the server down, drops its saved
+--- session, and starts a fresh, empty server on the same port. Open preview
+--- tabs reconnect to the new server and show an empty list.
+---
+--- mo confirms the operation on stdin, and the plugin answers `y` itself, so
+--- you are never shown that prompt. `--clear` is port-scoped: it takes `port`
+--- and rejects `target` and `open`. mo exits 0 whether the clear happened or
+--- was canceled, so the outcome is read from stderr.
+---@param opts table|nil May contain `port`.
+---@return boolean started
+function M.clear(opts)
+  local cfg = resolve_port(opts or {})
+  if not cfg then
+    return false
+  end
+
+  return cli.clear(cfg, function(result)
+    if not result or result.code ~= 0 then
+      report_failure(result)
+      return
+    end
+
+    local stderr = type(result.stderr) == "string" and result.stderr or ""
+    local detected = stderr:match("for port (%d+)") or stderr:match("port (%d+)")
+
+    if stderr:find("canceled", 1, true) then
+      util.notify("mo canceled the clear; nothing was cleared", vim.log.levels.WARN)
+    elseif stderr:find("cleared session and restarted server", 1, true) then
+      util.notify(string.format("cleared all files and restarted mo on port %s", detected or port_label(cfg)))
+    elseif stderr:find("cleared saved session", 1, true) then
+      util.notify(string.format("cleared the saved mo session for port %s", detected or port_label(cfg)))
+    elseif stderr:find("no saved session", 1, true) then
+      util.notify(string.format("no mo session to clear on port %s", detected or port_label(cfg)))
+    else
+      util.notify("cleared the mo session")
+    end
   end)
 end
 

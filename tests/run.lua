@@ -71,10 +71,16 @@ end
 local function reset_log()
   local file = assert(io.open(fake_log, "w"))
   file:close()
+  os.remove(fake_log .. ".stdin")
 end
 
 local function log_text()
   return read_file(fake_log) or ""
+end
+
+-- The answer fake mo read from its stdin, or nil when it saw EOF.
+local function log_stdin()
+  return read_file(fake_log .. ".stdin")
 end
 
 local function log_args()
@@ -162,6 +168,7 @@ local function test(name, fn)
   vim.env.MO_FAKE_FAIL = ""
   vim.env.MO_FAKE_MULTI = ""
   vim.env.MO_FAKE_EMPTY = ""
+  vim.env.MO_FAKE_CLEAR = ""
 
   local ok, err = xpcall(fn, debug.traceback)
   if ok then
@@ -220,6 +227,29 @@ test("parses --target, --port, --close, --no-open, and --open", function()
   eq(close_args.port, 6276)
   eq(close_args.close, true)
 
+  local clear_args = assert(args.parse("--clear"))
+  eq(clear_args.clear, true)
+  eq(clear_args.close, nil, "clear is its own mode, not a close")
+  local clear_port = assert(args.parse("--clear --port 6276"))
+  eq(clear_port.clear, true)
+  eq(clear_port.port, 6276)
+
+  for _, combined in ipairs({
+    "--clear --close",
+    "--close --clear",
+    "--clear --open",
+    "--open --clear",
+    "--clear --no-open",
+    "--no-open --clear",
+    "--clear --target docs",
+    "--target docs --clear",
+  }) do
+    local value, clear_err = args.parse(combined)
+    eq(value, nil, "should reject: " .. combined)
+    contains(clear_err, "cannot be combined", "should explain: " .. combined)
+    contains(clear_err, "--clear", "error should name --clear: " .. combined)
+  end
+
   local cases = {
     { "--target", "--target" },
     { "--port", "--port" },
@@ -229,7 +259,7 @@ test("parses --target, --port, --close, --no-open, and --open", function()
     { "--no-open=1", "--no-open" },
     { "--open=1", "--open" },
     { "--close=1", "--close" },
-    { "--clear", "unknown option" },
+    { "--clear=1", "--clear" },
     { "--bogus", "unknown option" },
     { "docs", "use --target" },
     { [[--target "unterminated]], "unterminated quote" },
@@ -277,6 +307,18 @@ test("parses the bang modifier", function()
     contains(conflict_err, "cannot be combined")
     contains(conflict_err, "!")
     contains(conflict_err, "--close")
+  end
+
+  -- `!` conflicts with --clear as well.
+  for _, input in ipairs({
+    "--clear",
+    "--clear --port 6276",
+  }) do
+    local value, conflict_err = args.parse(input, { bang = true })
+    eq(value, nil, "should reject: ! " .. input)
+    contains(conflict_err, "cannot be combined")
+    contains(conflict_err, "!")
+    contains(conflict_err, "--clear")
   end
 
   -- Other invalid arguments still take precedence over the bang check.
@@ -585,6 +627,138 @@ test("reports a failing MoPreview --close", function()
     return notified_text():find("fake mo failure", 1, true) ~= nil
   end, "mo's close error was not reported")
   check(not notified_text():find("closed", 1, true), "success must not be reported")
+end)
+
+test("clears the whole mo session with MoPreview --clear", function()
+  -- --clear works on a port, not on a file, so it needs no buffer file.
+  vim.cmd("enew")
+
+  vim.cmd("MoPreview --clear")
+  wait_for(function()
+    return notified_text():find("cleared all files and restarted mo", 1, true) ~= nil
+  end, "clear was not reported")
+
+  eq(table.concat(log_args(), " "), "--port 6123 --clear")
+  check(not has_arg("--target"), "--clear must not pass a target")
+  check(not has_arg("--json"), "--clear must not request JSON")
+  check(not has_arg("--close"), "--clear must not pass --close")
+  check(not has_arg("--no-open"), "--clear must not pass --no-open")
+  -- mo reads the confirmation from stdin; with no answer it sees EOF and
+  -- cancels, so the plugin has to write one.
+  eq(log_stdin(), "y", "the plugin must answer mo's confirmation prompt")
+  contains(notified_text(), "6123")
+  eq(opened, nil, "clear must not open a browser")
+end)
+
+test("applies --port to MoPreview --clear", function()
+  vim.cmd("enew")
+
+  vim.cmd("MoPreview --clear --port 6202")
+  wait_for(function()
+    return notified_text():find("cleared all files and restarted mo", 1, true) ~= nil
+  end, "clear was not reported")
+
+  eq(table.concat(log_args(), " "), "--port 6202 --clear")
+  contains(notified_text(), "6202")
+  eq(config.get().port, 6123, "--port must not change the configuration")
+end)
+
+test("uses the configured port for MoPreview --clear", function()
+  setup({ port = 6203 })
+  vim.cmd("enew")
+
+  vim.cmd("MoPreview --clear")
+  wait_for(function()
+    return notified_text():find("cleared all files and restarted mo", 1, true) ~= nil
+  end, "clear was not reported")
+
+  eq(table.concat(log_args(), " "), "--port 6203 --clear")
+end)
+
+test("reports a canceled MoPreview --clear", function()
+  vim.cmd("enew")
+  vim.env.MO_FAKE_CLEAR = "canceled"
+
+  vim.cmd("MoPreview --clear")
+  wait_for(function()
+    return notified_text():find("canceled", 1, true) ~= nil
+  end, "the cancelation was not reported")
+
+  -- mo exits 0 when it cancels, so a success message here would be a lie.
+  check(not notified_text():find("cleared all files", 1, true), "a canceled clear must not be reported as success")
+  eq(notified[1].level, vim.log.levels.WARN)
+end)
+
+test("reports a missing session on MoPreview --clear", function()
+  vim.cmd("enew")
+  vim.env.MO_FAKE_CLEAR = "nosession"
+
+  vim.cmd("MoPreview --clear")
+  wait_for(function()
+    return notified_text():find("no mo session to clear", 1, true) ~= nil
+  end, "the missing session was not reported")
+
+  check(not notified_text():find("cleared all files", 1, true), "an empty session must not be reported as cleared")
+end)
+
+test("reports a failing MoPreview --clear", function()
+  vim.cmd("enew")
+
+  vim.env.MO_FAKE_FAIL = "1"
+  vim.cmd("MoPreview --clear")
+  wait_for(function()
+    return notified_text():find("fake mo failure", 1, true) ~= nil
+  end, "mo's clear error was not reported")
+  check(not notified_text():find("cleared", 1, true), "success must not be reported")
+end)
+
+test("rejects --clear combined with file-scoped flags", function()
+  local path = tmp .. "/bad-clear.md"
+  open_buffer(path, "# Bad clear\n")
+
+  for _, command in ipairs({
+    "MoPreview --clear --target docs",
+    "MoPreview --target docs --clear",
+    "MoPreview --clear --close",
+    "MoPreview --clear --no-open",
+    "MoPreview --clear --open",
+    "MoPreview! --clear",
+  }) do
+    notified = {}
+    vim.cmd(command)
+    contains(notified_text(), "cannot be combined", "should reject: " .. command)
+  end
+
+  eq(log_text(), "", "mo must not run for conflicting flags")
+end)
+
+test("rejects clear() with a target or open", function()
+  eq(preview.clear({ target = "docs" }), false)
+  contains(notified_text(), "not supported by clear")
+
+  notified = {}
+  eq(preview.clear({ open = true }), false)
+  contains(notified_text(), "not supported by clear")
+
+  notified = {}
+  eq(preview.clear({ port = 0 }), false)
+  contains(notified_text(), "port")
+
+  eq(log_text(), "", "mo must not run for invalid options")
+end)
+
+test("builds a port-scoped command for clear", function()
+  local cfg = { cmd = "mo", port = 6276 }
+  eq(table.concat(cli.command(nil, cfg, nil, "clear"), " "), "mo --port 6276 --clear")
+  -- No configured port: mo's default port is implied, so no --port is passed.
+  eq(table.concat(cli.command(nil, { cmd = "mo" }, nil, "clear"), " "), "mo --clear")
+
+  -- The open and close modes keep their file argument and target group.
+  eq(
+    table.concat(cli.command("/tmp/a.md", { cmd = "mo", port = 6123 }, "docs", "close"), " "),
+    "mo --port 6123 --target docs --close /tmp/a.md"
+  )
+  check(target_arg(cli.command("/tmp/a.md", { cmd = "mo" }, nil, "open")) ~= nil)
 end)
 
 test("rejects invalid command arguments before running mo", function()

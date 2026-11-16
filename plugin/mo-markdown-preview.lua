@@ -3,7 +3,7 @@ if vim.g.loaded_mo_markdown_preview == 1 then
 end
 vim.g.loaded_mo_markdown_preview = 1
 
-local preview_usage = ":MoPreview[!] [--target TARGET] [--port PORT] [--close|--no-open|--open]"
+local preview_usage = ":MoPreview[!] [--target TARGET] [--port PORT] [--close|--clear|--no-open|--open]"
 
 local function complete(flags)
   return function(arg_lead)
@@ -33,7 +33,9 @@ vim.api.nvim_create_user_command("MoPreview", function(opts)
     return
   end
   local preview = require("mo-markdown-preview")
-  if parsed.close then
+  if parsed.clear then
+    preview.clear(parsed)
+  elseif parsed.close then
     preview.close(parsed)
   else
     preview.open(parsed)
@@ -41,6 +43,6 @@ vim.api.nvim_create_user_command("MoPreview", function(opts)
 end, {
   nargs = "*",
   bang = true,
-  desc = "Open or close the current buffer with mo",
-  complete = complete({ "--target", "--port", "--close", "--no-open", "--open" }),
+  desc = "Open or close the current buffer with mo, or clear a mo session",
+  complete = complete({ "--target", "--port", "--close", "--clear", "--no-open", "--open" }),
 })

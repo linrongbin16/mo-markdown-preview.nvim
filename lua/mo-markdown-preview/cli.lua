@@ -54,7 +54,10 @@ local function default_target(path)
 end
 
 --- Build a mo command with the shared port/target flags.
----@param path string
+---
+--- A nil `path` builds a port-scoped command: `--clear` works on a whole port,
+--- so it takes neither a target group nor a file argument.
+---@param path string|nil
 ---@param cfg table
 ---@param target string|nil
 ---@param flags string[]
@@ -66,28 +69,54 @@ local function build_command(path, cfg, target, flags)
     vim.list_extend(cmd, { "--port", tostring(cfg.port) })
   end
 
-  local group = target
-  if group == nil or group == "" then
-    group = default_target(path)
+  if path ~= nil then
+    local group = target
+    if group == nil or group == "" then
+      group = default_target(path)
+    end
+    vim.list_extend(cmd, { "--target", group })
   end
-  vim.list_extend(cmd, { "--target", group })
+
   vim.list_extend(cmd, flags)
-  vim.list_extend(cmd, { path })
+
+  if path ~= nil then
+    cmd[#cmd + 1] = path
+  end
   return cmd
 end
 
---- Build the `mo` command used to add a file to the preview server, or to
---- close it again.
+--- Modes accepted by `M.command()` and `M.run()`.
+local MODES = {
+  open = { "--no-open", "--json" },
+  close = { "--close" },
+  clear = { "--clear" },
+}
+
+--- Build the `mo` command used to add a file to the preview server, to close
+--- it again, or to clear a whole port session.
 ---
---- mo always runs with `--no-open`: the plugin opens the file's deeplink
---- itself, so `--open` is never passed and a single call cannot open two tabs.
----@param path string
+--- mo always runs with `--no-open` when opening: the plugin opens the file's
+--- deeplink itself, so `--open` is never passed and a single call cannot open
+--- two tabs.
+---
+--- `--clear` is port-scoped, so `path` is nil for it: the command gets only
+--- the flags and the optional `--port`.
+---@param path string|nil nil for the `clear` mode
 ---@param cfg table
 ---@param target string|nil
----@param close boolean|nil When true, build the `mo --close` command instead.
+---@param mode string|boolean|nil "open" (default), "close", or "clear"; `true` is the legacy spelling of "close".
 ---@return string[]
-function M.command(path, cfg, target, close)
-  local flags = close and { "--close" } or { "--no-open", "--json" }
+function M.command(path, cfg, target, mode)
+  if mode == true then
+    mode = "close"
+  elseif mode == false or mode == nil then
+    mode = "open"
+  end
+
+  local flags = MODES[mode]
+  if not flags then
+    error(string.format("unknown mo command mode %s", vim.inspect(mode)))
+  end
   return build_command(path, cfg, target, flags)
 end
 
@@ -137,11 +166,16 @@ function M.find_url(data, path)
 end
 
 --- Run a prepared mo command and return its result through `callback`.
+---
+--- `stdin` is written to the child's standard input. mo reads `os.Stdin` for
+--- the `--clear` confirmation, and a nil `stdin` means /dev/null, so the
+--- confirmation would see EOF and the call would always be canceled.
 ---@param cmd string[]
 ---@param cfg table
 ---@param callback fun(result: table)
+---@param stdin string|nil
 ---@return boolean started
-local function start(cmd, cfg, callback)
+local function start(cmd, cfg, callback, stdin)
   local exe, err = executable(cfg)
   if not exe then
     vim.schedule(function()
@@ -156,10 +190,15 @@ local function start(cmd, cfg, callback)
 
   cmd[1] = exe
 
-  local ok, proc = pcall(vim.system, cmd, {
+  local opts = {
     text = true,
     cwd = vim.fn.getcwd(),
-  }, function(obj)
+  }
+  if stdin ~= nil then
+    opts.stdin = stdin
+  end
+
+  local ok, proc = pcall(vim.system, cmd, opts, function(obj)
     vim.schedule(function()
       callback(obj)
     end)
@@ -180,14 +219,30 @@ end
 
 --- Run mo to add a file to the preview server, or to close it again, and
 --- report the result through `callback`.
----@param path string
+---@param path string|nil
 ---@param cfg table
 ---@param target string|nil
----@param close boolean|nil When true, run `mo --close`.
+---@param mode string|boolean|nil "open" (default), "close", or "clear".
 ---@param callback fun(result: table)
 ---@return boolean started
-function M.run(path, cfg, target, close, callback)
-  return start(M.command(path, cfg, target, close), cfg, callback)
+function M.run(path, cfg, target, mode, callback)
+  return start(M.command(path, cfg, target, mode), cfg, callback)
+end
+
+--- Run `mo --clear`, answering its confirmation prompt with `y`.
+---
+--- mo asks on stderr and reads the answer from stdin; with no stdin the answer
+--- is EOF, which mo treats as "canceled". The answer has to be fed here: a
+--- Neovim child process never inherits the terminal's stdin, and mo has no
+--- non-interactive switch for `--clear`.
+---
+--- Both a canceled and a successful clear exit 0, so the caller has to inspect
+--- stderr instead of the exit code.
+---@param cfg table
+---@param callback fun(result: table)
+---@return boolean started
+function M.clear(cfg, callback)
+  return start(M.command(nil, cfg, nil, "clear"), cfg, callback, "y\n")
 end
 
 return M
