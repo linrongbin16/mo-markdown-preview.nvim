@@ -261,6 +261,12 @@ preview server that restores sessions across invocations. Use
 - Unsaved changes are not previewed. Save the file and let `mo` reload it.
 - Buffers without a file on disk (unnamed buffers, `oil://`, terminal buffers,
   and so on) are rejected with an error message.
+- On Windows, `mo` servers started in WSL (or in any other environment that
+  shares the port) cannot read Windows paths such as `C:\...`. The Windows `mo`
+  client still exits 0 when such a server rejects the file, so the plugin reads
+  the `mo: added 0 item(s)` line on stderr and reports it, naming the port.
+  Stop the other server with `mo --shutdown` in that environment, or preview on
+  a free port with `--port` or the `port` option.
 
 ## Development
 
@@ -270,6 +276,10 @@ need `mo` or a browser:
 ```sh
 make test
 ```
+
+Run them from a POSIX shell (Linux, macOS, or WSL): the fake `mo` is a shell
+script, and Windows cannot execute it, so every test that calls `mo` fails
+there. On Windows, run `make test` from WSL against the checkout on `/mnt/c`.
 
 Lua sources are formatted with [StyLua](https://github.com/JohnnyMorganz/StyLua)
 using the settings in `.stylua.toml` (2-space indent, 120 columns):

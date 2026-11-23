@@ -165,6 +165,42 @@ function M.find_url(data, path)
   return nil
 end
 
+--- Read the number of files mo reported adding from its stderr.
+---
+--- `mo --json` still exits 0 when the server refuses a file: the POST fails,
+--- mo skips the entry, and the JSON `files` list comes back empty while stderr
+--- says `mo: added 0 item(s) to http://localhost:6275`. That line is the only
+--- clue mo leaves about a refused file, so the caller reads it to tell "the
+--- server rejected the path" apart from "no file was added at all".
+---@param stderr string|nil
+---@return integer|nil count nil when mo printed no such line
+function M.added_count(stderr)
+  if type(stderr) ~= "string" then
+    return nil
+  end
+
+  local count = stderr:match("added%s+(%d+)%s+item")
+  return count and tonumber(count) or nil
+end
+
+--- Whether mo would refuse a file as binary.
+---
+--- mo reads the first 8 KiB of a file and rejects it when the bytes contain a
+--- NUL (`readFileHead` and `State.AddFile` in mo's server). Mirroring that
+--- check locally lets the plugin name the reason instead of guessing.
+---@param path string
+---@return boolean
+function M.is_binary(path)
+  local file = io.open(path, "rb")
+  if not file then
+    return false
+  end
+
+  local head = file:read(8192)
+  file:close()
+  return type(head) == "string" and head:find("\0", 1, true) ~= nil
+end
+
 --- Run a prepared mo command and return its result through `callback`.
 ---
 --- `stdin` is written to the child's standard input. mo reads `os.Stdin` for
