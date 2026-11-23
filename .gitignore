@@ -1,0 +1,7 @@
+# Test and editor leftovers.
+*.swp
+*.swo
+.tags
+
+# Local tooling state (DeepSeek Harness memory databases live here).
+.dsh-meow-memory/

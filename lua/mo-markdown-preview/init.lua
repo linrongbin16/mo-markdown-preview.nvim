@@ -45,6 +45,61 @@ local function port_label(cfg)
   return "the default port"
 end
 
+--- Explain why mo returned no deeplink for a file.
+---
+--- A missing deeplink has three causes, and they have different fixes, so the
+--- message names the one mo's own output points at instead of blaming the
+--- file: the file is binary, the server refused the path it was given, or mo
+--- said nothing useful and the reason is unknown.
+---@param cfg table
+---@param path string
+---@param result table
+---@return string
+local function explain_missing(cfg, path, result)
+  local stderr = type(result.stderr) == "string" and result.stderr or ""
+  local detail = util.trim(stderr)
+
+  if cli.is_binary(path) then
+    return string.format(
+      "mo did not add %s to the preview: it looks like a binary file, and mo only renders text files",
+      vim.inspect(path)
+    )
+  end
+
+  -- mo still exits 0 when its server rejects the file; only the "added 0
+  -- item(s)" line on stderr tells that apart from an unidentified failure.
+  if cli.added_count(stderr) == 0 then
+    if vim.fn.has("win32") == 1 then
+      return string.format(
+        "mo did not add %s to the preview: the mo server on port %s refused the path (%s). "
+          .. "On Windows this usually means that server runs in another environment, such as WSL, "
+          .. "where Windows paths do not exist. Stop it with `mo --shutdown` in that environment, "
+          .. "or preview on another port with `--port` or the `port` option",
+        vim.inspect(path),
+        port_label(cfg),
+        detail
+      )
+    end
+    return string.format(
+      "mo did not add %s to the preview: the mo server on port %s refused the path (%s). "
+        .. "Make sure the server runs on this machine and can read that path",
+      vim.inspect(path),
+      port_label(cfg),
+      detail
+    )
+  end
+
+  if detail ~= "" then
+    return string.format(
+      "mo did not add %s to the preview (%s). It may not be a file mo can render",
+      vim.inspect(path),
+      detail
+    )
+  end
+
+  return string.format("mo did not add %s to the preview (it may not be a file mo can render)", vim.inspect(path))
+end
+
 ---@class mo.markdown.preview.Context
 ---@field path string
 ---@field target string|nil
@@ -157,13 +212,11 @@ function M.open(opts)
 
     local url = cli.find_url(data, ctx.path)
     if not url then
-      -- mo accepted the command but did not add this file, which happens
-      -- when it rejects the file itself (for example a binary file).
-      -- Say so instead of opening an unrelated page.
-      util.notify(
-        string.format("mo did not add %s to the preview (it may not be a file mo can render)", vim.inspect(ctx.path)),
-        vim.log.levels.ERROR
-      )
+      -- mo accepted the command but did not add this file, which happens when
+      -- it rejects the file (a binary file) or when its server cannot see the
+      -- path it was sent (a server from another environment, such as WSL on
+      -- Windows). Report the actual reason instead of opening an unrelated page.
+      util.notify(explain_missing(ctx.call_cfg, ctx.path, result), vim.log.levels.ERROR)
       return
     end
 

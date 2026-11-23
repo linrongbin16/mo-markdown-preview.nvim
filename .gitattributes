@@ -1,0 +1,10 @@
+* text=auto
+
+# The tests run fake_mo.sh, and a CRLF shebang ("/bin/bash\r") makes the
+# kernel look for an interpreter named "bash\r". Keep shell scripts LF-only
+# even when the repository is checked out on Windows.
+*.sh text eol=lf
+
+# `.stylua.toml` formats Lua with Unix line endings, so a CRLF checkout makes
+# `make fmt-check` rewrite every line of every file. Keep Lua LF-only too.
+*.lua text eol=lf

@@ -168,6 +168,7 @@ local function test(name, fn)
   vim.env.MO_FAKE_FAIL = ""
   vim.env.MO_FAKE_MULTI = ""
   vim.env.MO_FAKE_EMPTY = ""
+  vim.env.MO_FAKE_SILENT = ""
   vim.env.MO_FAKE_CLEAR = ""
 
   local ok, err = xpcall(fn, debug.traceback)
@@ -937,6 +938,58 @@ test("reports when mo does not add the file", function()
 
   eq(opened, nil, "no page must be opened when mo did not add the file")
   contains(notified_text(), "rejected.md")
+  contains(notified_text(), "added 0 item(s) to http://localhost:6275", "mo's own stderr should be reported")
+  contains(notified_text(), "6123", "the message should name the port")
+end)
+
+test("says the file looks binary when mo refuses a binary file", function()
+  vim.env.MO_FAKE_EMPTY = "1"
+  local path = tmp .. "/binary.md"
+  write_file(path, "text\0more\n")
+  vim.cmd.edit(vim.fn.fnameescape(path))
+
+  check(preview.open(), "preview should start")
+  wait_for(function()
+    return notified_text():find("did not add", 1, true) ~= nil
+  end, "the missing preview was not reported")
+
+  eq(opened, nil, "no page must be opened")
+  contains(notified_text(), "binary file")
+  check(notified_text():find("added 0 item(s)", 1, true) == nil, "a binary file should be explained as such")
+end)
+
+test("falls back to the generic message when mo explains nothing", function()
+  vim.env.MO_FAKE_SILENT = "1"
+  local path = tmp .. "/silent.md"
+  open_buffer(path, "# Silent\n")
+
+  check(preview.open(), "preview should start")
+  wait_for(function()
+    return notified_text():find("did not add", 1, true) ~= nil
+  end, "the missing preview was not reported")
+
+  eq(opened, nil, "no page must be opened")
+  contains(notified_text(), "may not be a file mo can render")
+end)
+
+test("reads the added count from mo's stderr", function()
+  eq(cli.added_count("mo: added 0 item(s) to http://localhost:6275\n"), 0)
+  eq(cli.added_count("mo: added 3 item(s) to http://localhost:6275\n"), 3)
+  eq(cli.added_count("mo: restoring previous session for port 6275\n"), nil)
+  eq(cli.added_count(""), nil)
+  eq(cli.added_count(nil), nil)
+end)
+
+test("detects binary files the way mo does", function()
+  local text = tmp .. "/plain.txt"
+  write_file(text, "hello world\n")
+  eq(cli.is_binary(text), false)
+
+  local binary = tmp .. "/blob.bin"
+  write_file(binary, "abc\0def")
+  eq(cli.is_binary(binary), true)
+
+  eq(cli.is_binary(tmp .. "/does-not-exist"), false, "a missing file must not be reported as binary")
 end)
 
 test("matches symlinked paths the way mo reports them", function()

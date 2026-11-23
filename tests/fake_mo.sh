@@ -76,8 +76,19 @@ if [ "${MO_FAKE_MULTI:-0}" = "1" ]; then
   exit 0
 fi
 
-# mo exits 0 with an empty file list when it rejects a file (binary, unreadable).
+# mo exits 0 with an empty file list when its server rejects a file. The only
+# trace of the rejection is the "added 0 item(s)" line on stderr.
 if [ "${MO_FAKE_EMPTY:-0}" = "1" ]; then
+  printf '{\n'
+  printf '  "url": "http://localhost:6275",\n'
+  printf '  "files": []\n'
+  printf '}\n'
+  echo "mo: added 0 item(s) to http://localhost:6275" >&2
+  exit 0
+fi
+
+# The same empty result, but mo printed nothing that explains it.
+if [ "${MO_FAKE_SILENT:-0}" = "1" ]; then
   printf '{\n'
   printf '  "url": "http://localhost:6275",\n'
   printf '  "files": []\n'
